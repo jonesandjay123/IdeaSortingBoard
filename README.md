@@ -6,14 +6,40 @@
 
 ## 怎麼跑起來
 
+需要 **Node 18 以上**(`@google/genai` SDK 的要求)。
+
 ```bash
 npm install
+cp .env.example .env
+# 把 .env 裡的 VITE_GEMINI_API_KEY 換成你自己的金鑰
 npm run dev
 ```
 
 打開 http://localhost:5173。
 
-所有資料都存在你瀏覽器裡(IndexedDB),不會有任何東西離開你的電腦。
+第一次載入會自動 seed 5 張繁中 demo 卡 + 三個預設 snapshot。右邊是
+未分類的小卡池,中間是 column,把卡拖進你想放的欄位就行。
+
+所有卡片和 snapshot 都存在你瀏覽器裡(IndexedDB),只有**翻譯**的
+時候會把那張卡的文字送去 Google Gemini,其他操作完全離線。
+
+### 關於 Gemini API 金鑰
+
+可以到 <https://aistudio.google.com/apikey> 申請一把免費的 key。
+拿到之後貼進 `.env` 檔案就好:
+
+```
+VITE_GEMINI_API_KEY=你的金鑰
+```
+
+注意幾件事:
+
+- `.env` 已經在 `.gitignore` 裡,不會被 commit 進 repo。
+- 環境變數名稱**必須**是 `VITE_GEMINI_API_KEY`。Vite 只會把 `VITE_`
+  開頭的變數注入進前端程式碼,換名字就讀不到了。
+- 這個 app 沒有後端,金鑰會被打包進瀏覽器的 JS。本機/教室裡自己用沒
+  問題,但**不要把這個 repo 部署到公開網址**,不然別人打開 DevTools
+  就看得到你的 key。
 
 ## 三個預設框架在幹嘛
 
@@ -64,7 +90,7 @@ IndexedDB 裡(用 Dexie 包)有三個邏輯表:
 - 新增一張卡 → 會自動出現在**每個 snapshot 的 unplaced 池**,所以
   切換框架時看到的永遠是同一堆想法。
 
-## 翻譯(現在是 mock,之後會接 Gemini)
+## 翻譯(Gemini 2.5 Flash)
 
 `src/services/translationService.js` 對外只有一個 async 函式:
 
@@ -72,17 +98,23 @@ IndexedDB 裡(用 Dexie 包)有三個邏輯表:
 translate(text, sourceLang, targetLang) => Promise<string>
 ```
 
-目前是 mock,會等 600–1300ms 再回傳一個有標籤的 placeholder,像
-`[日本語] …`,主要是為了讓 UI 的「翻譯中…」狀態真的看得到。
+底下呼叫的是 Google 官方的 `@google/genai` SDK,模型用
+`gemini-2.5-flash`。Prompt 被刻意寫得很嚴:只回傳翻譯本身,不要
+引號、不要說明、不要語言標籤、不要羅馬拼音,如果 AI 還是手賤加了
+引號進來,我們這邊會再 strip 一次。
 
-**要換成 Gemini 的時候**,只要替換 `translate()` 的函式內容即可。
-檔案最上面有一段註解示範怎麼呼叫 Gemini。App 的其他地方都不用動 ——
-任何需要翻譯的地方都只經過這一個函式,而且 `actions.js` 裡有一個
-stale-response guard,會確認回來的翻譯對應的還是最新的文字,不會讓
-慢吞吞的舊翻譯覆蓋掉剛改好的新內容。
+**觸發時機**:新增一張卡按下 Create、或編輯完按下 Save 以後,會在
+背景送去翻譯;卡片會先顯示「翻譯中…」的 loading 狀態,翻好再換成
+結果。`actions.js` 有一個 stale-response guard,會確認回來的翻譯
+對應的還是最新的文字,不會讓慢吞吞的舊翻譯覆蓋掉剛改好的新內容 ——
+所以你可以放心在短時間內連改好幾次。
+
+**要換成別的翻譯引擎的時候**,只要改 `translate()` 的函式本體,保持
+一樣的 signature 就好。App 的其他地方都不用動。
 
 目前支援的語言:`zh-Hant`、`zh-Hans`、`en`、`ja`。想加更多語言的
-話,在同一個檔案擴充 `SUPPORTED_LANGUAGES` 就好。
+話,在同一個檔案擴充 `SUPPORTED_LANGUAGES` 和 `LANGUAGE_PROMPT_NAMES`
+就好。
 
 ## 介面小技巧
 
@@ -102,7 +134,7 @@ src/
 │   ├── database.js           Dexie schema + settings helper
 │   └── actions.js            所有的 mutation(cards、snapshots、columns、placement)
 ├── services/
-│   └── translationService.js 抽象化的 translate() —— 之後在這裡換 Gemini
+│   └── translationService.js Gemini 2.5 Flash 翻譯實作(`@google/genai`)
 ├── lib/
 │   ├── seedData.js           第一次啟動的預設資料
 │   └── theme.js              用 localStorage 記憶的深色/淺色切換
@@ -119,9 +151,10 @@ src/
 
 ## 技術棧
 
-React 18 + Vite · Dexie (IndexedDB) + `dexie-react-hooks` 做響應式讀取
-· `@dnd-kit/core` + `@dnd-kit/sortable` 做多容器拖曳 · 純 CSS 搭配
-變數(容易換主題,不需要 Tailwind 的雜訊)。
+React 18 + Vite · Dexie (IndexedDB) + `dexie-react-hooks` 做響應式
+讀取 · `@dnd-kit/core` + `@dnd-kit/sortable` 做多容器拖曳 ·
+`@google/genai` 接 Gemini 2.5 Flash 做翻譯 · 純 CSS 搭配變數(容易
+換主題,不需要 Tailwind 的雜訊)。
 
 ## 需要重置時
 

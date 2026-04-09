@@ -36,6 +36,8 @@ questions.
 ```bash
 cd <path to IdeaSortingBoard>
 npm install
+cp .env.example .env
+# edit .env and paste your Gemini API key into VITE_GEMINI_API_KEY
 npm run dev
 # open http://localhost:5173
 ```
@@ -45,6 +47,12 @@ right-side "card pool", three seeded snapshots in the dropdown
 (`Yes / No`, `Easy / Medium / Hard / Impossible`, `Now / Later / Never`).
 Dark theme by default. Drag cards between columns; switch snapshots with
 the dropdown; `+` in the side panel opens the create-card modal.
+
+Cards that already have a `targetLang` set will translate via Gemini as
+soon as they're created or edited. Without a valid
+`VITE_GEMINI_API_KEY`, `runTranslation` in `actions.js` catches the
+thrown error and flips the card's `translationStatus` to `"error"` — the
+card itself still works, it just shows "Translation failed" underneath.
 
 Likely bugs that need real-browser eyes:
 
@@ -142,10 +150,18 @@ src/
   project is also a teaching artifact and the styles need to be readable
   by the student.
 - **Translation is abstracted behind `src/services/translationService.js`.**
-  Currently a mock. When swapping in Gemini, **only** replace the body of
-  `translate()`. `actions.js` has a stale-response guard that compares
-  `sourceText` and `targetLang` before writing back, so slow translations
-  can't clobber fresh edits — preserve that behavior.
+  Currently Gemini 2.5 Flash via `@google/genai`. If you swap providers,
+  **only** replace the body of `translate()` and keep the signature.
+  `actions.js` has a stale-response guard that compares `sourceText` and
+  `targetLang` before writing back, so slow translations can't clobber
+  fresh edits — preserve that behavior.
+- **API key comes from `import.meta.env.VITE_GEMINI_API_KEY`.** Vite only
+  exposes env vars with the `VITE_` prefix to client code. In the browser
+  there is no `process.env`, so we pass the key explicitly into
+  `new GoogleGenAI({ apiKey })` — do not remove that. The key ends up in
+  the shipped JS bundle, which is fine for local/classroom use but a
+  security issue if the app is ever publicly hosted — in that case, move
+  the API call behind a server/edge function.
 
 ## Drag-and-drop notes (the easy place to break things)
 
@@ -186,12 +202,14 @@ src/
 ## Pending TODOs (roughly in order of likely next steps)
 
 1. **`npm install && npm run dev`** on a real machine — first verification.
-2. **Fix whatever breaks** in the first run. Most likely: dnd-kit index
-   off-by-one edges, IndexedDB migration issues if you change the schema.
-3. **Swap the mock translator for Gemini.** The user has done this before
-   — they'll probably want to bring their own API key. Only edit the
-   body of `translate()` in `translationService.js`. Don't change its
-   signature.
+2. **Set up `.env`** with a real `VITE_GEMINI_API_KEY` (copy from
+   `.env.example`). Without it, translations throw and cards show the
+   error state — the rest of the app still works.
+3. **Fix whatever breaks** in the first run. Most likely: dnd-kit index
+   off-by-one edges, IndexedDB migration issues if you change the schema,
+   or Gemini prompt polishing if you see the model adding stray quotes
+   or preambles (the translator already strips wrapping quotes, but the
+   prompt wording may need tuning per language pair).
 4. **Classroom iteration.** Things that might come up once the student
    actually uses it:
    - Bigger / larger-font cards for projector visibility
