@@ -275,6 +275,10 @@ button {
   padding: 20px;
   overflow-x: auto;
   overflow-y: hidden;
+  /* Center the column group when it fits; `safe` keyword makes flex fall
+     back to flex-start when content overflows so the leftmost column
+     doesn't get clipped out of reach of horizontal scroll. */
+  justify-content: safe center;
 }
 
 .board-empty {
@@ -536,22 +540,62 @@ button {
    Side panel
    ========================================================= */
 .side-panel {
-  width: 260px;
+  /* Width is controlled by inline style from SidePanel.jsx (persisted
+     to localStorage via a drag-to-resize handle on the left edge).
+     No hover-expand — it caused targeting problems. */
   flex-shrink: 0;
   background: var(--color-unplaced-bg);
   border-left: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
-  transition: width 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
-}
-
-.side-panel:hover {
-  width: 320px;
-  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.35);
+  position: relative;
+  transition: background 0.15s ease;
 }
 
 .side-panel-over {
   background: var(--color-unplaced-over);
+}
+
+.side-panel-resizing {
+  /* Freeze background transition while actively resizing so the
+     panel doesn't "flash" if the pointer crosses droppable boundaries. */
+  transition: none;
+}
+
+/* Resize handle sits straddling the left edge of the panel. It extends
+   a few pixels into the board area to create a forgiving hit target
+   without visually overlapping the board content. */
+.side-panel-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  width: 8px;
+  cursor: col-resize;
+  z-index: 5;
+  background: transparent;
+  touch-action: none;
+}
+
+/* Subtle vertical bar that shows on hover / while dragging. */
+.side-panel-resize-handle::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  width: 2px;
+  height: 42px;
+  margin-top: -21px;
+  border-radius: 2px;
+  background: var(--color-border-strong);
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.side-panel-resize-handle:hover::after,
+.side-panel-resize-handle.is-dragging::after {
+  opacity: 1;
+  background: var(--color-primary);
 }
 
 .side-panel-header {
