@@ -6,53 +6,61 @@
    and the inline bootstrap script in index.html.
    ========================================================= */
 :root {
-  /* Backgrounds / surfaces */
-  --color-bg: #0f1115;
-  --color-surface: #181b22;
-  --color-surface-raised: #20242c;
-  --color-border: #2a2f39;
-  --color-border-strong: #3a414d;
+  /* Backgrounds / surfaces — deep violet-tinted dark.
+     Three levels of depth so the hierarchy reads cleanly:
+       page < toolbar/column < card
+     Each step lifts luminance by roughly 5% toward violet. */
+  --color-bg: #13111c;
+  --color-surface: #1d1a2e;
+  --color-surface-raised: #27223a;
+  --color-border: #322b4d;
+  --color-border-strong: #443c66;
 
-  /* Text */
-  --color-text: #e6e8ee;
-  --color-text-muted: #9aa3b2;
-  --color-text-subtle: #6b7280;
+  /* Text — slight violet tint so it harmonizes with the surfaces */
+  --color-text: #ebe7f5;
+  --color-text-muted: #a39bc2;
+  --color-text-subtle: #6d6690;
 
-  /* Brand */
-  --color-primary: #7c73ff;
-  --color-primary-hover: #9089ff;
-  --color-primary-soft: rgba(124, 115, 255, 0.22);
+  /* Brand — vivid violet (Tailwind-ish violet-500) */
+  --color-primary: #8b5cf6;
+  --color-primary-hover: #a78bfa;
+  --color-primary-soft: rgba(139, 92, 246, 0.22);
 
   /* States */
   --color-danger: #f87171;
   --color-danger-hover: #fca5a5;
-  --color-danger-bg: rgba(248, 113, 113, 0.12);
+  --color-danger-bg: rgba(248, 113, 113, 0.14);
 
-  /* Columns & drop zones */
-  --color-column-bg: #1d2029;
-  --color-column-over: #2a2d60;
-  --color-unplaced-bg: #2a2417;
-  --color-unplaced-over: #3a2f1c;
-  --color-card-bg: #232831;
-  --color-drop-zone-bg: rgba(255, 255, 255, 0.03);
+  /* Columns & drop zones.
+     Columns are clearly lifted from the board bg; cards are
+     clearly lifted from the columns. Hover/drop uses a saturated
+     violet so it feels alive. */
+  --color-column-bg: #221d38;
+  --color-column-over: #3a2d6b;
+  --color-unplaced-bg: #2a1f3a;   /* warm wine purple — cosy contrast */
+  --color-unplaced-over: #3d2c52;
+  --color-card-bg: #2d2748;
+  --color-drop-zone-bg: rgba(139, 92, 246, 0.06);
 
-  /* Input surfaces inside forms/cards that need a lift over surface */
-  --color-input-bg: #1b1f27;
+  /* Input surfaces (sunken into toolbar/modal) */
+  --color-input-bg: #1a1729;
 
-  /* Scrollbars */
-  --color-scrollbar: rgba(255, 255, 255, 0.14);
-  --color-scrollbar-hover: rgba(255, 255, 255, 0.26);
+  /* Scrollbars — tinted with the brand violet */
+  --color-scrollbar: rgba(167, 139, 250, 0.18);
+  --color-scrollbar-hover: rgba(167, 139, 250, 0.34);
 
   /* Modal backdrop */
-  --color-backdrop: rgba(0, 0, 0, 0.55);
+  --color-backdrop: rgba(8, 5, 18, 0.68);
 
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.45);
-  --shadow-lg: 0 16px 36px rgba(0, 0, 0, 0.55);
+  /* Shadows tinted with a touch of violet instead of pure black
+     so they feel part of the palette, not dropped onto it. */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 4px 14px rgba(10, 5, 30, 0.55);
+  --shadow-lg: 0 16px 36px rgba(10, 5, 30, 0.7);
 
   --font-sans: -apple-system, BlinkMacSystemFont, "PingFang TC",
     "Hiragino Sans", "Helvetica Neue", Arial, "Microsoft JhengHei", sans-serif;
@@ -281,27 +289,65 @@ button {
   justify-content: safe center;
 }
 
-.board-empty {
-  margin: auto;
-  color: var(--color-text-muted);
-  text-align: center;
-  font-size: 14px;
-}
-
 /* =========================================================
    Column
    ========================================================= */
 .column {
-  flex: 0 0 280px;
+  /* Flexible width: grows to fill available space when there are
+     only a few columns (so Yes/No doesn't look cramped on a wide
+     screen), but clamped by min/max so it never gets tiny or
+     ridiculously wide. When many columns overflow the board,
+     min-width takes over and the board scrolls horizontally. */
+  flex: 1 1 340px;
+  min-width: 300px;
+  max-width: 460px;
   display: flex;
   flex-direction: column;
   background: var(--color-column-bg);
   border-radius: var(--radius-md);
-  padding: 12px;
+  padding: 14px;
   border: 2px solid transparent;
   transition: border-color 0.15s, background 0.15s;
   max-height: 100%;
   min-height: 120px;
+}
+
+/* Inline "+ Add column" slot at the end of the board.
+   Narrower than a real column and sits at the top so it doesn't
+   dominate visually when there's only a couple of real columns. */
+.column-add-slot {
+  flex: 0 0 200px;
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 28px 16px;
+  min-height: 148px;
+  border: 2px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s,
+    transform 0.1s;
+}
+
+.column-add-slot:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+  transform: translateY(-1px);
+}
+
+.column-add-slot-plus {
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 300;
 }
 
 .column-over {

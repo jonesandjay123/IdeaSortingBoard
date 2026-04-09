@@ -207,17 +207,6 @@ export default function Board() {
       >
         <div className="main-layout">
           <div className="board">
-            {currentSnapshot.layout.columns.length === 0 && (
-              <div className="board-empty">
-                <div>
-                  <div style={{ fontSize: 32, marginBottom: 12 }}>📦</div>
-                  <div>No columns in this snapshot yet.</div>
-                  <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
-                    Click <strong>+ Add column</strong> in the toolbar.
-                  </div>
-                </div>
-              </div>
-            )}
             {currentSnapshot.layout.columns.map((col) => (
               <Column
                 key={col.id}
@@ -231,6 +220,21 @@ export default function Board() {
                 onDeleteCard={handleDeleteCard}
               />
             ))}
+            {/* Inline "add column" slot — visible both when empty and
+                when populated, so users don't need to hunt for the
+                toolbar button. */}
+            <button
+              className="column-add-slot"
+              type="button"
+              onClick={() => {
+                const name = window.prompt('New column name', 'New column');
+                if (name && name.trim()) handleAddColumn(name.trim());
+              }}
+              title="Add a new column to this snapshot"
+            >
+              <span className="column-add-slot-plus">+</span>
+              <span>Add column</span>
+            </button>
           </div>
 
           <SidePanel
