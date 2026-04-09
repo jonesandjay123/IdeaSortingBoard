@@ -1,43 +1,42 @@
-# Idea Sorting Board
+# Idea Sorting Board（想法分類板）
 
-A single-page teaching tool for turning vague ideas into sortable, translatable
-cards and dragging them across different categorization frames. Built for the
-moment in a lesson when you want to ask "is this easy or hard?" without touching
-any code.
+一個單頁的教學工具,用來把模糊的想法變成可以拖曳、翻譯的小卡,並在不同
+的分類框架之間來回切換。專門為了課堂上那個「這個功能算簡單還是難?」
+的當下而做,完全不需要碰程式碼。
 
-## Run it
+## 怎麼跑起來
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open http://localhost:5173.
+打開 http://localhost:5173。
 
-Data lives entirely in your browser (IndexedDB), so nothing leaves your machine.
+所有資料都存在你瀏覽器裡(IndexedDB),不會有任何東西離開你的電腦。
 
-## What the three default frames are for
+## 三個預設框架在幹嘛
 
-On first load, three snapshots are seeded:
+第一次載入會自動建立三個框架:
 
-1. **Yes / No** — a binary warm-up. Good first question: "Could we even do this?"
-2. **Easy / Medium / Hard / Impossible** — the main teaching frame. The goal is
-   to build product intuition about feature difficulty. Drag each idea into its
-   bucket; argue about borderline cases.
-3. **Now / Later / Never** — a prioritization reframe. Same cards, new lens.
+1. **Yes / No** — 最簡單的二分題。起手式:「這件事我們到底做不做得
+   到?」
+2. **Easy / Medium / Hard / Impossible** — 本工具的主戰場。目的是
+   訓練對功能難度的直覺。把每張小卡拖進對應的難度,為邊緣案例爭論。
+3. **Now / Later / Never** — 換個視角做優先順序。同一堆想法,新的
+   問題。
 
-The killer move is switching between snapshots mid-conversation so the same
-pile of ideas keeps showing up under different questions.
+真正的魔法是在對話中**切換不同的 snapshot**,讓同一堆想法在不同問題
+下反覆出現,逼自己用不同角度看同一件事。
 
-## Data model (why this doesn't break)
+## 資料模型(為什麼這東西不會壞)
 
-There are three logical tables in IndexedDB (via Dexie):
+IndexedDB 裡(用 Dexie 包)有三個邏輯表:
 
-- `cards` — the source of truth for card content. Every card has a stable id.
-  Editing text or translation only updates this table; all snapshots reflect
-  the change because they reference cards by id.
-- `snapshots` — one row per categorization view. Each stores its own `layout`
-  JSON:
+- `cards` — 小卡內容的單一真相來源。每張小卡有固定 id。編輯文字或
+  翻譯只會動到這張表,所有 snapshot 因為都是用 id 參照,會自動反映
+  變更。
+- `snapshots` — 每個分類視圖一筆,各自儲存自己的 `layout` JSON:
 
   ```json
   {
@@ -49,79 +48,87 @@ There are three logical tables in IndexedDB (via Dexie):
   }
   ```
 
-  The same card can live in different columns across different snapshots.
-- `settings` — small key/value bag (current snapshot id, default languages,
-  seeded flag).
+  同一張小卡可以在不同 snapshot 裡落在不同 column。
+- `settings` — 小小的 key/value 包(目前 snapshot id、預設語言、
+  seed 旗標)。
 
-**Edge cases this design handles automatically**:
+**這個設計自動處理的邊緣情境**:
 
-- Delete a card → removed from `cards`, all snapshots sweep their layouts.
-- Delete a column → its cards fall back to `unplacedCardIds` in that snapshot
-  only, so cards are never silently lost.
-- Delete a snapshot → cards are untouched; current snapshot auto-switches to
-  another.
-- Rename anything → only touches one row; every reference is by id.
-- Add a card → appears in the unplaced pool of every snapshot so switching
-  frames shows the same pile.
+- 刪一張卡 → 從 `cards` 移除,所有 snapshot 的 layout 都會掃掉它的
+  id。
+- 刪一個 column → 裡面的卡**不會被刪**,而是掉回該 snapshot 的
+  `unplacedCardIds`,絕對不會有小卡無聲消失的事。
+- 刪一個 snapshot → 小卡本身完全不動;目前 snapshot 自動切到另一
+  個還存在的。
+- 改名任何東西 → 只動一筆,所有參照都是用 id,不會對不到。
+- 新增一張卡 → 會自動出現在**每個 snapshot 的 unplaced 池**,所以
+  切換框架時看到的永遠是同一堆想法。
 
-## Translation (mock now, Gemini later)
+## 翻譯(現在是 mock,之後會接 Gemini)
 
-`src/services/translationService.js` exports a single async function:
+`src/services/translationService.js` 對外只有一個 async 函式:
 
 ```js
 translate(text, sourceLang, targetLang) => Promise<string>
 ```
 
-The current implementation is a mock that waits 600–1300ms and returns a
-labeled placeholder like `[日本語] …`, so the async "Translating…" state is
-visible in the UI.
+目前是 mock,會等 600–1300ms 再回傳一個有標籤的 placeholder,像
+`[日本語] …`,主要是為了讓 UI 的「翻譯中…」狀態真的看得到。
 
-**To swap in Gemini**, replace only the body of `translate()`. The file has an
-example call commented at the top. Nothing else in the app needs to change —
-everything that needs translation goes through this one function, and there's
-a stale-response guard in `actions.js` so a slow translation can't overwrite a
-fresh edit.
+**要換成 Gemini 的時候**,只要替換 `translate()` 的函式內容即可。
+檔案最上面有一段註解示範怎麼呼叫 Gemini。App 的其他地方都不用動 ——
+任何需要翻譯的地方都只經過這一個函式,而且 `actions.js` 裡有一個
+stale-response guard,會確認回來的翻譯對應的還是最新的文字,不會讓
+慢吞吞的舊翻譯覆蓋掉剛改好的新內容。
 
-Supported languages: `zh-Hant`, `zh-Hans`, `en`, `ja`. Add more by extending
-`SUPPORTED_LANGUAGES` in the same file.
+目前支援的語言:`zh-Hant`、`zh-Hans`、`en`、`ja`。想加更多語言的
+話,在同一個檔案擴充 `SUPPORTED_LANGUAGES` 就好。
 
-## Keyboard shortcuts
+## 介面小技巧
 
-- **⌘/Ctrl + Enter** inside the new-card modal → submit
-- **Esc** → close modal
-- **Double-click** a column title → rename inline
+- **⌘/Ctrl + Enter**:在新增卡片 modal 裡直接送出
+- **Esc**:關掉 modal
+- **雙擊 column 標題**:直接改名
+- **右上角 ☀️/🌙 按鈕**:切換深色/淺色模式。預設是深色(保護眼睛),
+  選擇會存在 localStorage,下次打開會記得。
 
-## Project layout
+## 專案結構
 
 ```
 src/
-├── main.jsx                  React entry
-├── App.jsx                   Seeding gate + mounts <Board>
+├── main.jsx                  React 入口
+├── App.jsx                   Seeding gate + 掛載 <Board>
 ├── db/
-│   ├── database.js           Dexie schema + settings helpers
-│   └── actions.js            Every mutation (cards, snapshots, columns, placement)
+│   ├── database.js           Dexie schema + settings helper
+│   └── actions.js            所有的 mutation(cards、snapshots、columns、placement)
 ├── services/
-│   └── translationService.js Abstracted translate() — swap for Gemini here
+│   └── translationService.js 抽象化的 translate() —— 之後在這裡換 Gemini
 ├── lib/
-│   └── seedData.js           First-run defaults
+│   ├── seedData.js           第一次啟動的預設資料
+│   └── theme.js              用 localStorage 記憶的深色/淺色切換
 ├── components/
-│   ├── Board.jsx             Top-level layout + DndContext + drag handlers
-│   ├── Toolbar.jsx           Snapshot selector + add/rename/delete
-│   ├── Column.jsx            One draggable-drop-target column
-│   ├── Card.jsx              Sortable idea card + CardPreview for DragOverlay
-│   ├── SidePanel.jsx         Right side "card pool" for unplaced ideas
-│   └── CardModal.jsx         Create / edit modal
+│   ├── Board.jsx             最上層版面 + DndContext + 拖曳 handler
+│   ├── Toolbar.jsx           Snapshot 選擇器 + 主題切換 + 新增/改名/刪除
+│   ├── Column.jsx            一個可拖曳放下的 column
+│   ├── Card.jsx              可排序的想法小卡 + 給 DragOverlay 用的 CardPreview
+│   ├── SidePanel.jsx         右側「未分類小卡池」
+│   └── CardModal.jsx         新增/編輯 modal
 └── styles/
-    └── app.css               All styles; theme via CSS variables at :root
+    └── app.css               所有樣式;主題用 CSS 變數,:root 是深色
 ```
 
-## Stack
+## 技術棧
 
-React 18 + Vite · Dexie (IndexedDB) + `dexie-react-hooks` for reactive reads ·
-`@dnd-kit/core` + `@dnd-kit/sortable` for multi-container drag-and-drop ·
-plain CSS with variables (easy to retheme, no Tailwind noise).
+React 18 + Vite · Dexie (IndexedDB) + `dexie-react-hooks` 做響應式讀取
+· `@dnd-kit/core` + `@dnd-kit/sortable` 做多容器拖曳 · 純 CSS 搭配
+變數(容易換主題,不需要 Tailwind 的雜訊)。
 
-## Reset
+## 需要重置時
 
-If you want to wipe everything and re-seed, open the browser devtools →
-Application → IndexedDB → delete `IdeaSortingBoard`, then reload.
+想要全部清掉重 seed 的話,打開瀏覽器 DevTools → Application →
+IndexedDB → 刪掉 `IdeaSortingBoard` 資料庫 → 重新整理頁面。
+
+## 給下一個 Claude session 看的
+
+如果你是 Claude Code CLI 開起來的 session,先讀 `CLAUDE.md`。那裡面
+有資料模型的 invariant、不要亂動的地方,還有接下來最可能踩到的坑。

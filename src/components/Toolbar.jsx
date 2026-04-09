@@ -1,3 +1,6 @@
+import { useEffect, useState } from 'react';
+import { getStoredTheme, toggleTheme } from '../lib/theme.js';
+
 export default function Toolbar({
   snapshots,
   currentSnapshotId,
@@ -8,6 +11,19 @@ export default function Toolbar({
   onAddColumn,
 }) {
   const current = snapshots.find((s) => s.id === currentSnapshotId);
+
+  // Local mirror of the theme so the icon flips immediately on click.
+  // Source of truth is the `data-theme` attribute on <html>, driven by
+  // src/lib/theme.js. We seed from the stored value on mount.
+  const [theme, setTheme] = useState('dark');
+  useEffect(() => {
+    setTheme(getStoredTheme());
+  }, []);
+
+  function handleToggleTheme() {
+    const next = toggleTheme();
+    setTheme(next);
+  }
 
   function handleNewSnapshot() {
     const name = window.prompt('New snapshot name', 'Untitled frame');
@@ -81,6 +97,14 @@ export default function Toolbar({
         </button>
       </div>
       <div className="toolbar-right">
+        <button
+          className="toolbar-icon-btn"
+          onClick={handleToggleTheme}
+          title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+          aria-label="Toggle color theme"
+        >
+          {theme === 'dark' ? '☀️' : '🌙'}
+        </button>
         <button
           className="toolbar-btn primary"
           onClick={handleAddColumn}

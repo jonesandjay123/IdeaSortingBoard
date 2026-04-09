@@ -1,32 +1,103 @@
+/* =========================================================
+   Theme variables
+   =========================================================
+   Default palette is DARK. Light mode is expressed as an
+   override under [data-theme="light"]. See src/lib/theme.js
+   and the inline bootstrap script in index.html.
+   ========================================================= */
 :root {
-  --color-bg: #f4f5f9;
-  --color-surface: #ffffff;
-  --color-border: #e4e7ec;
-  --color-border-strong: #cbd3dc;
-  --color-text: #1a1d23;
-  --color-text-muted: #6b7280;
-  --color-text-subtle: #9aa1ac;
-  --color-primary: #5b51e5;
-  --color-primary-hover: #4a40d8;
-  --color-primary-soft: rgba(91, 81, 229, 0.12);
-  --color-danger: #ef4444;
-  --color-danger-hover: #dc2626;
-  --color-column-bg: #eceff5;
-  --color-column-over: #dfe4ff;
-  --color-unplaced-bg: #fff6e5;
-  --color-unplaced-over: #ffe9c2;
-  --color-card-bg: #ffffff;
+  /* Backgrounds / surfaces */
+  --color-bg: #0f1115;
+  --color-surface: #181b22;
+  --color-surface-raised: #20242c;
+  --color-border: #2a2f39;
+  --color-border-strong: #3a414d;
+
+  /* Text */
+  --color-text: #e6e8ee;
+  --color-text-muted: #9aa3b2;
+  --color-text-subtle: #6b7280;
+
+  /* Brand */
+  --color-primary: #7c73ff;
+  --color-primary-hover: #9089ff;
+  --color-primary-soft: rgba(124, 115, 255, 0.22);
+
+  /* States */
+  --color-danger: #f87171;
+  --color-danger-hover: #fca5a5;
+  --color-danger-bg: rgba(248, 113, 113, 0.12);
+
+  /* Columns & drop zones */
+  --color-column-bg: #1d2029;
+  --color-column-over: #2a2d60;
+  --color-unplaced-bg: #2a2417;
+  --color-unplaced-over: #3a2f1c;
+  --color-card-bg: #232831;
+  --color-drop-zone-bg: rgba(255, 255, 255, 0.03);
+
+  /* Input surfaces inside forms/cards that need a lift over surface */
+  --color-input-bg: #1b1f27;
+
+  /* Scrollbars */
+  --color-scrollbar: rgba(255, 255, 255, 0.14);
+  --color-scrollbar-hover: rgba(255, 255, 255, 0.26);
+
+  /* Modal backdrop */
+  --color-backdrop: rgba(0, 0, 0, 0.55);
 
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
 
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 16px 36px rgba(0, 0, 0, 0.55);
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "PingFang TC",
+    "Hiragino Sans", "Helvetica Neue", Arial, "Microsoft JhengHei", sans-serif;
+
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --color-bg: #f4f5f9;
+  --color-surface: #ffffff;
+  --color-surface-raised: #ffffff;
+  --color-border: #e4e7ec;
+  --color-border-strong: #cbd3dc;
+
+  --color-text: #1a1d23;
+  --color-text-muted: #6b7280;
+  --color-text-subtle: #9aa1ac;
+
+  --color-primary: #5b51e5;
+  --color-primary-hover: #4a40d8;
+  --color-primary-soft: rgba(91, 81, 229, 0.12);
+
+  --color-danger: #ef4444;
+  --color-danger-hover: #dc2626;
+  --color-danger-bg: #fef2f2;
+
+  --color-column-bg: #eceff5;
+  --color-column-over: #dfe4ff;
+  --color-unplaced-bg: #fff6e5;
+  --color-unplaced-over: #ffe9c2;
+  --color-card-bg: #ffffff;
+  --color-drop-zone-bg: rgba(255, 255, 255, 0.4);
+
+  --color-input-bg: #ffffff;
+
+  --color-scrollbar: rgba(0, 0, 0, 0.12);
+  --color-scrollbar-hover: rgba(0, 0, 0, 0.2);
+
+  --color-backdrop: rgba(16, 24, 40, 0.5);
+
   --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
   --shadow-md: 0 4px 14px rgba(16, 24, 40, 0.08);
   --shadow-lg: 0 16px 36px rgba(16, 24, 40, 0.16);
 
-  --font-sans: -apple-system, BlinkMacSystemFont, "PingFang TC",
-    "Hiragino Sans", "Helvetica Neue", Arial, "Microsoft JhengHei", sans-serif;
+  color-scheme: light;
 }
 
 * {
@@ -107,6 +178,9 @@ button {
 
 .toolbar-right {
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .toolbar-label {
@@ -119,7 +193,7 @@ button {
   padding: 6px 10px;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
-  background: var(--color-surface);
+  background: var(--color-input-bg);
   font-size: 13px;
   color: var(--color-text);
   min-width: 220px;
@@ -136,7 +210,7 @@ button {
   padding: 6px 12px;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
-  background: var(--color-surface);
+  background: var(--color-surface-raised);
   font-size: 13px;
   cursor: pointer;
   color: var(--color-text);
@@ -164,9 +238,31 @@ button {
 }
 
 .toolbar-btn.danger:hover {
-  background: #fef2f2;
+  background: var(--color-danger-bg);
   border-color: var(--color-danger);
   color: var(--color-danger-hover);
+}
+
+.toolbar-icon-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+}
+
+.toolbar-icon-btn:hover {
+  background: var(--color-bg);
+  border-color: var(--color-text-muted);
+  transform: translateY(-1px);
 }
 
 /* =========================================================
@@ -238,7 +334,7 @@ button {
   border: 1px solid var(--color-primary);
   border-radius: var(--radius-sm);
   width: 100%;
-  background: #fff;
+  background: var(--color-input-bg);
   color: var(--color-text);
   font-family: inherit;
 }
@@ -309,7 +405,7 @@ button {
   font-style: italic;
   border: 2px dashed var(--color-border);
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.4);
+  background: var(--color-drop-zone-bg);
 }
 
 /* =========================================================
@@ -322,12 +418,13 @@ button {
   box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
-  transition: box-shadow 0.15s;
+  transition: box-shadow 0.15s, border-color 0.15s;
   user-select: none;
 }
 
 .card:hover {
   box-shadow: var(--shadow-md);
+  border-color: var(--color-border-strong);
 }
 
 .card-drag-handle {
@@ -397,7 +494,7 @@ button {
   gap: 2px;
   padding: 3px 6px 4px;
   border-top: 1px solid var(--color-border);
-  background: rgba(244, 245, 249, 0.6);
+  background: var(--color-drop-zone-bg);
 }
 
 .card-action-btn {
@@ -423,7 +520,7 @@ button {
 
 .card-action-btn.danger:hover {
   color: var(--color-danger);
-  background: #fef2f2;
+  background: var(--color-danger-bg);
 }
 
 /* Card preview used by DragOverlay. */
@@ -450,7 +547,7 @@ button {
 
 .side-panel:hover {
   width: 320px;
-  box-shadow: -8px 0 24px rgba(16, 24, 40, 0.06);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.35);
 }
 
 .side-panel-over {
@@ -526,7 +623,7 @@ button {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(16, 24, 40, 0.5);
+  background: var(--color-backdrop);
   backdrop-filter: blur(2px);
   display: flex;
   align-items: center;
@@ -543,6 +640,7 @@ button {
   max-width: 92vw;
   box-shadow: var(--shadow-lg);
   animation: slideUp 0.2s ease;
+  border: 1px solid var(--color-border);
 }
 
 .modal h2 {
@@ -581,7 +679,7 @@ button {
   font-size: 14px;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
-  background: #fff;
+  background: var(--color-input-bg);
   color: var(--color-text);
   font-family: inherit;
   resize: vertical;
@@ -609,6 +707,7 @@ button {
   background: var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: 3px;
+  color: var(--color-text);
 }
 
 .modal-actions {
@@ -677,7 +776,7 @@ button {
 .column-body::-webkit-scrollbar-thumb,
 .side-panel-body::-webkit-scrollbar-thumb,
 .board::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.12);
+  background: var(--color-scrollbar);
   border-radius: 10px;
   border: 2px solid transparent;
   background-clip: content-box;
@@ -685,7 +784,7 @@ button {
 .column-body::-webkit-scrollbar-thumb:hover,
 .side-panel-body::-webkit-scrollbar-thumb:hover,
 .board::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--color-scrollbar-hover);
   background-clip: content-box;
 }
 
