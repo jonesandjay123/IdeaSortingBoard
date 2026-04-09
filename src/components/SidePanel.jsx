@@ -25,7 +25,13 @@ export default function SidePanel({
   onDeleteCard,
   onEditCard,
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: 'unplaced' });
+  // `type: 'unplaced'` lets Board.jsx's custom collision detection
+  // exclude this droppable when the user is dragging a column (so you
+  // can't accidentally "drop" a column into the card pool).
+  const { setNodeRef, isOver } = useDroppable({
+    id: 'unplaced',
+    data: { type: 'unplaced' },
+  });
   const [width, setWidth] = useState(readStoredWidth);
   const [resizing, setResizing] = useState(false);
 

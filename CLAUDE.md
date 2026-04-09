@@ -22,14 +22,30 @@ questions.
 
 ## Current status
 
-- **Built:** all source files written, data model settled, drag-and-drop
-  logic done, dark mode default, seed data ready.
-- **NOT built / NOT tested:** dependencies have never been installed and
-  the dev server has never been run. I tried in the Cowork sandbox — it
-  cannot reach `registry.npmjs.org` (E403). That's why we're handing off
-  to the CLI.
-- **Syntax-checked with esbuild**, so every `.jsx` and `.js` file parses,
-  but that's it. No runtime verification.
+- **Running on the real machine.** Dev server has been started,
+  Gemini 2.5 Flash translation is verified working with a real key.
+  The user has been iterating on UX in the browser and the Cowork
+  sessions only make edits against a real, running app now.
+- **Committed so far:** initial scaffold → Gemini integration →
+  first CSS pass (violet palette, side-panel drag-resize, centered
+  board, widened columns, inline "+ Add column" slot, dark mode as
+  default).
+- **Pending commit at time of writing (session 2026-04-09 evening):**
+  - `DragOverlay` has `dropAnimation={null}` — kills the jarring
+    "replay the trip" snap-back the library does by default when you
+    drop a card.
+  - Columns are now drag-reorderable via a dedicated grip rail at
+    the very top of each column (new `.column-drag-rail` element,
+    only that element carries the sortable listeners so nothing in
+    the column body can accidentally start a column drag).
+  - Card palette switched to deep burnt-orange so cards pop against
+    the violet board.
+- **Sandbox caveat:** the Cowork sandbox cannot reach
+  `registry.npmjs.org` (E403), so I can't run `npm install` or
+  `npm run dev` in here. I only syntax-check with the globally
+  installed esbuild and rely on the user to reload their dev server.
+  If you're Claude Code on the real machine, you can actually run the
+  app — please do.
 
 ### First things to do in the CLI
 
@@ -54,10 +70,14 @@ soon as they're created or edited. Without a valid
 thrown error and flips the card's `translationStatus` to `"error"` — the
 card itself still works, it just shows "Translation failed" underneath.
 
-Likely bugs that need real-browser eyes:
+Likely bugs that still need real-browser eyes:
 
 - dnd-kit cross-container drop indices (insertion index off-by-one cases
   when dropping at the end of a non-empty column)
+- Column reorder edge cases: dropping a column "past" the last column
+  and landing on the "+ Add column" slot instead of another column
+  (the slot is not a sortable, so it should be a safe no-op, but
+  verify)
 - Mobile / narrow-viewport layout (we only designed for desktop)
 - IndexedDB first-run race if you open two tabs simultaneously (seed
   dedupe only covers one tab)
@@ -119,16 +139,23 @@ src/
 │   ├── database.js            Dexie schema + getSetting/setSetting helpers
 │   └── actions.js             EVERY mutation (cards, snapshots, columns, placement)
 ├── services/
-│   └── translationService.js  Abstracted translate() — swap for Gemini here
+│   └── translationService.js  Gemini 2.5 Flash translate() via @google/genai
 ├── lib/
 │   ├── seedData.js            First-run defaults (deduped via seedPromise)
 │   └── theme.js               localStorage-backed dark/light toggle
 ├── components/
-│   ├── Board.jsx              DndContext + drag handlers + top-level layout
+│   ├── Board.jsx              DndContext + horizontal SortableContext for
+│   │                          columns + custom collisionDetection + dragEnd
+│   │                          routing (card vs column) + inline "+ Add column"
 │   ├── Toolbar.jsx            Snapshot selector + theme toggle + add/rename/delete
-│   ├── Column.jsx             One useDroppable + SortableContext column
-│   ├── Card.jsx               Sortable card + CardPreview (for DragOverlay)
-│   ├── SidePanel.jsx          Right-side unplaced-cards pool (useDroppable)
+│   ├── Column.jsx             Sortable column (useSortable w/ data:{type:'column'})
+│   │                          + top drag-rail grip + nested vertical
+│   │                          SortableContext for its cards
+│   ├── Card.jsx               Sortable card (data:{type:'card'}) + CardPreview
+│   │                          used by DragOverlay
+│   ├── SidePanel.jsx          Right-side unplaced-cards pool; useDroppable with
+│   │                          data:{type:'unplaced'}; drag-to-resize handle
+│   │                          (width persisted in localStorage)
 │   └── CardModal.jsx          Create/edit modal (⌘/Ctrl+Enter submits, Esc closes)
 └── styles/
     └── app.css                All styles; :root is DARK; [data-theme="light"] overrides
@@ -165,26 +192,89 @@ src/
 
 ## Drag-and-drop notes (the easy place to break things)
 
-- Top-level `<DndContext>` lives in `Board.jsx`. Collision detection is
-  `closestCorners`. Sensors: `PointerSensor` with `distance: 6` (so
-  clicks on action buttons inside cards don't start drags) and
-  `KeyboardSensor`.
-- Each column is a `useDroppable` **and** wraps its children in a
-  `SortableContext` with `verticalListSortingStrategy`. The side panel
-  is the same pattern with the droppable id `"unplaced"`.
+The DnD architecture now handles **two different kinds of drags** in
+the same `DndContext` — cards and columns — and most of the gotchas
+come from that split. Read this section before touching anything in
+`Board.jsx`, `Column.jsx`, or `Card.jsx`.
+
+### Type tagging
+
+Every sortable/droppable passes a `data: { type: '...' }` to dnd-kit:
+
+- `Card.jsx` → `useSortable({ id: card.id, data: { type: 'card' } })`
+- `Column.jsx` → `useSortable({ id: column.id, data: { type: 'column' } })`
+- `SidePanel.jsx` → `useDroppable({ id: 'unplaced', data: { type: 'unplaced' } })`
+
+`Board.jsx` branches on `active.data.current?.type` in `handleDragStart`
+and `handleDragEnd`. If you add a new droppable, **always** tag it with
+a type, or the custom collision filter will ignore it (see below).
+
+### Custom collision detection
+
+Because cards and columns are in the same DndContext, a naive
+`closestCorners` would let a column-drag latch onto a card (bad) or
+onto the "unplaced" pool (worse). `Board.jsx` defines a
+`collisionDetection` callback that:
+
+- When `active.data.current.type === 'column'`, pre-filters
+  `droppableContainers` to only those with `type === 'column'`, then
+  runs `closestCorners`. Columns can only collide with other columns.
+- Otherwise (card drag) runs `closestCorners` on everything. Card
+  behavior is unchanged from the pre-column-reorder days.
+
+### Column reorder (horizontal)
+
+- `Board.jsx` wraps the column map in a `SortableContext` with
+  `horizontalListSortingStrategy` and column IDs as items.
+- Columns are **not** cloned into a `DragOverlay` — the column div
+  itself carries the dnd-kit transform and slides under the cursor.
+  That's why the `DragOverlay` content is gated on
+  `activeType === 'card'`.
+- `handleDragEnd` has a dedicated column branch that calls the new
+  `reorderColumns(snapshotId, fromIndex, toIndex)` action in
+  `actions.js`.
+- The only element that carries the column sortable's `{...listeners}`
+  `{...attributes}` is `.column-drag-rail` at the top of the column.
+  Everything else inside the column (header, rename, delete, cards,
+  scrollbars) is outside the listener scope so you can't accidentally
+  drag a whole column by clicking inside it. If you add a new
+  interactive element to the column, keep it outside the rail, not
+  inside it.
+
+### Card DnD (mostly unchanged)
+
+- Cards still use `useSortable` with `verticalListSortingStrategy`
+  nested inside each column and inside the side panel.
+- Card action buttons (edit / delete) live **outside** the drag
+  listeners — see `.card-drag-handle` vs `.card-action-bar` in
+  `Card.jsx`. If you rearrange that, test that clicking the buttons
+  doesn't start a drag.
 - `over.id` from dnd-kit can be either a container id (column id or
   `"unplaced"`) or a card id. `Board.jsx`'s `resolveContainerFromOverId`
   handles both cases. If you add a new droppable, it must handle being
   the target of both "drop on empty container" and "drop on a card
   inside it".
-- Card action buttons (edit / delete) live **outside** the drag listeners
-  — see `.card-drag-handle` vs `.card-action-bar` in `Card.jsx`. If you
-  rearrange that, test clicking the buttons without accidentally
-  starting a drag.
-- `placeCard()` in `actions.js` removes the card from wherever it is and
-  re-inserts into the target. The `toIndex === null` path means
-  "append". If `toContainerId` is missing, the card falls back to
+- `placeCard()` in `actions.js` removes the card from wherever it is
+  and re-inserts into the target. `toIndex === null` means "append".
+  If `toContainerId` is missing, the card falls back to
   `unplacedCardIds` so it's never lost.
+
+### Drop animation
+
+- `<DragOverlay dropAnimation={null}>`. The default dnd-kit behavior
+  is to animate the overlay from the cursor back to the sortable
+  node's resting position when you drop — which across containers
+  looks exactly like "replaying the trip", and the user found it
+  disorienting. `null` disables it; the overlay just vanishes and
+  the next Dexie-driven re-render places the card at its new home.
+- **Do not re-enable drop animation** without the user's say-so.
+
+### Sensors
+
+- `PointerSensor` with `activationConstraint: { distance: 6 }` so
+  click-throughs (edit/delete buttons, rename, column grip taps) don't
+  start drags. `KeyboardSensor` uses `sortableKeyboardCoordinates` for
+  accessibility.
 
 ## Theme
 
@@ -199,18 +289,42 @@ src/
 - CSS: dark palette in `:root`, light overrides in `[data-theme="light"]`.
   Always write new styles using the variables, not hex values.
 
+### Dark palette shape (matters for anyone editing colors)
+
+- **Board/surface layers (deep violet):** `--color-bg` `#13111c` →
+  `--color-surface` `#1d1a2e` → `--color-column-bg` `#221d38`. Three
+  luminance stops so the hierarchy reads cleanly without much
+  contrast.
+- **Brand (violet-500ish):** `--color-primary` `#8b5cf6`, hover
+  `--color-primary-hover` `#a78bfa`, soft tint `--color-primary-soft`
+  `rgba(139,92,246,0.22)`.
+- **Cards (deep burnt orange — intentional warm-on-cool):**
+  `--color-card-bg` `#5a2d15`, hover `--color-card-bg-hover`
+  `#6b3419`, border `--color-card-border` `#7a3b1a`. Dividers *inside*
+  the card (`.card-translation` border-top, `.card-action-bar`
+  border-top) use `--color-card-border` — do **not** swap them for
+  the generic `--color-border`, it reads as a muddy gray stripe on
+  orange.
+- **Light theme** does not inherit the orange. It overrides
+  `--color-card-bg` to white (`#ffffff`), `--color-card-bg-hover` to
+  `#f9fafb`, `--color-card-border` to `#e4e7ec`. If you add new
+  `--color-card-*` variables in dark, add the corresponding light
+  overrides in the same commit.
+
 ## Pending TODOs (roughly in order of likely next steps)
 
-1. **`npm install && npm run dev`** on a real machine — first verification.
-2. **Set up `.env`** with a real `VITE_GEMINI_API_KEY` (copy from
-   `.env.example`). Without it, translations throw and cards show the
-   error state — the rest of the app still works.
-3. **Fix whatever breaks** in the first run. Most likely: dnd-kit index
-   off-by-one edges, IndexedDB migration issues if you change the schema,
-   or Gemini prompt polishing if you see the model adding stray quotes
-   or preambles (the translator already strips wrapping quotes, but the
-   prompt wording may need tuning per language pair).
-4. **Classroom iteration.** Things that might come up once the student
+1. **Real-browser smoke test of the latest changes** — Gemini is
+   confirmed working, but the column drag-rail, the
+   `dropAnimation={null}` drop, and the orange palette all still need
+   a pair of human eyes to check for edge cases. Specifically:
+   - Drag Yes and No past each other and back. Nothing should look
+     like a replay; column transforms should feel snappy.
+   - Drag a card across containers. Make sure the overlay vanishes at
+     the cursor cleanly and the card appears in the new column at
+     the expected index.
+   - Drag a column onto the "+ Add column" slot. It's not a sortable,
+     so it should be a no-op; verify nothing crashes.
+2. **Classroom iteration.** Things that might come up once the student
    actually uses it:
    - Bigger / larger-font cards for projector visibility
    - Export a snapshot as an image (for recap slides)
@@ -218,9 +332,13 @@ src/
      cheap feature with `placeCard`
    - Drag cards directly between snapshots (probably not — it would
      break the "same pile, different lens" mental model)
-5. **Empty states**: the side panel and columns have basic empty states,
-   but the board has one for "no columns at all". All three are
-   intentionally minimal.
+3. **Empty states**: the side panel and columns have basic empty
+   states, and the board as a whole effectively has one via the
+   inline "+ Add column" slot (visible even when there are zero real
+   columns). All three are intentionally minimal.
+4. **Gemini prompt polish** if you see the model adding stray quotes
+   or preambles — the translator already strips wrapping quotes, but
+   the prompt wording may need tuning per language pair.
 
 ## Things NOT to do
 
@@ -255,4 +373,6 @@ src/
 
 ---
 
-Last updated by: Cowork Claude session, 2026-04-09
+Last updated by: Cowork Claude session, 2026-04-09 (evening —
+after adding column drag-reorder + `dropAnimation={null}` + deep
+orange card palette).

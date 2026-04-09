@@ -39,7 +39,12 @@
   --color-column-over: #3a2d6b;
   --color-unplaced-bg: #2a1f3a;   /* warm wine purple — cosy contrast */
   --color-unplaced-over: #3d2c52;
-  --color-card-bg: #2d2748;
+  /* Cards are deep burnt orange so they pop off the violet board
+     without looking neon. Three-stop scale:
+       base (resting) < hover (slightly lifted) < border (warm rust) */
+  --color-card-bg: #5a2d15;
+  --color-card-bg-hover: #6b3419;
+  --color-card-border: #7a3b1a;
   --color-drop-zone-bg: rgba(139, 92, 246, 0.06);
 
   /* Input surfaces (sunken into toolbar/modal) */
@@ -91,7 +96,12 @@
   --color-column-over: #dfe4ff;
   --color-unplaced-bg: #fff6e5;
   --color-unplaced-over: #ffe9c2;
+  /* Light theme keeps cards white — the orange palette is a dark-mode
+     flavor only. These match `--color-card-*` names so the .card rule
+     below works in both themes. */
   --color-card-bg: #ffffff;
+  --color-card-bg-hover: #f9fafb;
+  --color-card-border: #e4e7ec;
   --color-drop-zone-bg: rgba(255, 255, 255, 0.4);
 
   --color-input-bg: #ffffff;
@@ -355,6 +365,64 @@ button {
   background: var(--color-column-over);
 }
 
+/* Fade the source column out while it's being moved. The actual
+   transform/reorder animation is handled by dnd-kit's sortable. */
+.column-dragging {
+  z-index: 2;
+  cursor: grabbing;
+}
+
+/* =========================================================
+   Column drag rail (top-of-column grip for reordering)
+   =========================================================
+   A thin strip of dots at the top of every column. It's the ONLY
+   element that carries the column sortable's listeners, so you
+   can't start a column drag by accident anywhere else in the
+   column. Barely visible at rest, brightens when you hover the
+   column, and fully lit on direct hover so the affordance is
+   discoverable without looking noisy. */
+.column-drag-rail {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 14px;
+  margin: -6px -6px 6px -6px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-subtle);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  opacity: 0.25;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+
+.column:hover .column-drag-rail {
+  opacity: 0.7;
+}
+
+.column-drag-rail:hover {
+  opacity: 1;
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+.column-drag-rail:active,
+.column-dragging .column-drag-rail {
+  cursor: grabbing;
+  opacity: 1;
+  color: var(--color-primary-hover);
+  background: var(--color-primary-soft);
+}
+
+.column-drag-rail-dots {
+  font-size: 16px;
+  line-height: 1;
+  letter-spacing: 1px;
+  /* Slight downward nudge — the Unicode ⋮ glyph sits a little high
+     in most fonts so it doesn't visually center inside the rail. */
+  transform: translateY(-1px);
+}
+
 .column-header {
   display: flex;
   align-items: center;
@@ -463,18 +531,19 @@ button {
    ========================================================= */
 .card {
   background: var(--color-card-bg);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-card-border);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
-  transition: box-shadow 0.15s, border-color 0.15s;
+  transition: background 0.15s, box-shadow 0.15s, border-color 0.15s;
   user-select: none;
 }
 
 .card:hover {
+  background: var(--color-card-bg-hover);
   box-shadow: var(--shadow-md);
-  border-color: var(--color-border-strong);
+  border-color: var(--color-card-border);
 }
 
 .card-drag-handle {
@@ -519,7 +588,10 @@ button {
 .card-translation {
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px dashed var(--color-border);
+  /* Use the card-specific border so the divider harmonizes with the
+     card color (orange in dark mode, light gray in light mode) instead
+     of reading as a muddy purple stripe on the orange background. */
+  border-top: 1px dashed var(--color-card-border);
   font-size: 12px;
   color: var(--color-text-muted);
   line-height: 1.4;
@@ -543,7 +615,10 @@ button {
   justify-content: flex-end;
   gap: 2px;
   padding: 3px 6px 4px;
-  border-top: 1px solid var(--color-border);
+  /* Same rationale as .card-translation — match the card's own border
+     so the action bar blends into the card rather than looking like a
+     stripe of a different color. */
+  border-top: 1px solid var(--color-card-border);
   background: var(--color-drop-zone-bg);
 }
 

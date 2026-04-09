@@ -247,6 +247,30 @@ export async function deleteColumn(snapshotId, columnId) {
   await db.snapshots.update(snapshotId, { layout, updatedAt: Date.now() });
 }
 
+/**
+ * Reorder the columns of a snapshot. Moves the column at `fromIndex` to
+ * `toIndex` (both zero-based, within the current `layout.columns` array).
+ * No-op if either index is out of bounds or they're the same.
+ */
+export async function reorderColumns(snapshotId, fromIndex, toIndex) {
+  const snap = await db.snapshots.get(snapshotId);
+  if (!snap) return;
+  const layout = cloneLayout(snap.layout);
+  const n = layout.columns.length;
+  if (
+    fromIndex < 0 ||
+    fromIndex >= n ||
+    toIndex < 0 ||
+    toIndex >= n ||
+    fromIndex === toIndex
+  ) {
+    return;
+  }
+  const [moved] = layout.columns.splice(fromIndex, 1);
+  layout.columns.splice(toIndex, 0, moved);
+  await db.snapshots.update(snapshotId, { layout, updatedAt: Date.now() });
+}
+
 // ============================================================
 // Placement (drag-and-drop results)
 // ============================================================

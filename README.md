@@ -123,6 +123,15 @@ translate(text, sourceLang, targetLang) => Promise<string>
 - **雙擊 column 標題**:直接改名
 - **右上角 ☀️/🌙 按鈕**:切換深色/淺色模式。預設是深色(保護眼睛),
   選擇會存在 localStorage,下次打開會記得。
+- **Column 頂端的小點點握把**:按住往左右拖,可以重新排列欄位順序
+  (例如把 Yes/No 的左右對調)。平常幾乎看不見,hover 到欄位上時會
+  浮出來,直接 hover 到握把上會整個亮起來。
+- **欄位列最後面的虛線框「+ Add column」**:點下去就能在目前這個
+  snapshot 新增欄位,不用回頭找工具列按鈕。工具列那個按鈕也還在,
+  兩個入口並存。
+- **右邊卡片池的左邊緣**:滑到最左邊那條細線時游標會變成左右箭頭,
+  按住往左右拖可以調整卡片池的寬度。寬度會存在 localStorage,下次
+  打開會記得。
 
 ## 專案結構
 
@@ -139,11 +148,11 @@ src/
 │   ├── seedData.js           第一次啟動的預設資料
 │   └── theme.js              用 localStorage 記憶的深色/淺色切換
 ├── components/
-│   ├── Board.jsx             最上層版面 + DndContext + 拖曳 handler
+│   ├── Board.jsx             最上層版面 + DndContext + 欄位水平排序 + 拖曳 handler
 │   ├── Toolbar.jsx           Snapshot 選擇器 + 主題切換 + 新增/改名/刪除
-│   ├── Column.jsx            一個可拖曳放下的 column
+│   ├── Column.jsx            可拖曳重排的 column(頂端握把)+ 內部的卡片放置區
 │   ├── Card.jsx              可排序的想法小卡 + 給 DragOverlay 用的 CardPreview
-│   ├── SidePanel.jsx         右側「未分類小卡池」
+│   ├── SidePanel.jsx         右側「未分類小卡池」,可拖曳調整寬度
 │   └── CardModal.jsx         新增/編輯 modal
 └── styles/
     └── app.css               所有樣式;主題用 CSS 變數,:root 是深色

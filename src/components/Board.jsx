@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import {
   DndContext,
   closestCorners,
@@ -8,7 +8,11 @@ import {
   useSensors,
   DragOverlay,
 } from '@dnd-kit/core';
-import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
+import {
+  sortableKeyboardCoordinates,
+  SortableContext,
+  horizontalListSortingStrategy,
+} from '@dnd-kit/sortable';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/database.js';
 import {
@@ -23,6 +27,7 @@ import {
   addColumn,
   renameColumn,
   deleteColumn,
+  reorderColumns,
 } from '../db/actions.js';
 import Toolbar from './Toolbar.jsx';
 import Column from './Column.jsx';
@@ -65,12 +70,35 @@ export default function Board() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCard, setEditingCard] = useState(null);
 
-  // DragOverlay state.
+  // DragOverlay state. `activeType` is 'card' | 'column' | null and is
+  // used both to drive the overlay and to pick the right branch in
+  // handleDragEnd.
   const [activeId, setActiveId] = useState(null);
+  const [activeType, setActiveType] = useState(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  // Custom collision detection: when the user is dragging a COLUMN, we
+  // only want other COLUMNS to be valid drop candidates (not cards, not
+  // the card pool). When dragging a CARD, we keep the original behavior
+  // and let it target any droppable.
+  const collisionDetection = useCallback(
+    (args) => {
+      const activeData = args.active?.data.current;
+      if (activeData?.type === 'column') {
+        return closestCorners({
+          ...args,
+          droppableContainers: args.droppableContainers.filter(
+            (d) => d.data.current?.type === 'column'
+          ),
+        });
+      }
+      return closestCorners(args);
+    },
+    []
   );
 
   // ----------- Drag helpers -----------
@@ -100,9 +128,23 @@ export default function Board() {
 
   async function handleDragEnd(event) {
     const { active, over } = event;
+    const activeData = active.data.current;
     setActiveId(null);
+    setActiveType(null);
     if (!over || !currentSnapshot) return;
 
+    // Column reorder path.
+    if (activeData?.type === 'column') {
+      if (active.id === over.id) return;
+      const cols = currentSnapshot.layout.columns;
+      const oldIndex = cols.findIndex((c) => c.id === active.id);
+      const newIndex = cols.findIndex((c) => c.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return;
+      await reorderColumns(currentSnapshot.id, oldIndex, newIndex);
+      return;
+    }
+
+    // Card placement path (existing behavior).
     const fromContainer = findContainerOfCard(active.id);
     const toContainer = resolveContainerFromOverId(over.id);
     if (!fromContainer || !toContainer) return;
@@ -200,42 +242,58 @@ export default function Board() {
 
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCorners}
-        onDragStart={(e) => setActiveId(e.active.id)}
+        collisionDetection={collisionDetection}
+        onDragStart={(e) => {
+          setActiveId(e.active.id);
+          setActiveType(e.active.data.current?.type || 'card');
+        }}
         onDragEnd={handleDragEnd}
-        onDragCancel={() => setActiveId(null)}
+        onDragCancel={() => {
+          setActiveId(null);
+          setActiveType(null);
+        }}
       >
         <div className="main-layout">
-          <div className="board">
-            {currentSnapshot.layout.columns.map((col) => (
-              <Column
-                key={col.id}
-                column={col}
-                cards={col.cardIds
-                  .map((id) => cardsMap.get(id))
-                  .filter(Boolean)}
-                onRename={handleRenameColumn}
-                onDelete={handleDeleteColumn}
-                onEditCard={handleEditCard}
-                onDeleteCard={handleDeleteCard}
-              />
-            ))}
-            {/* Inline "add column" slot — visible both when empty and
-                when populated, so users don't need to hunt for the
-                toolbar button. */}
-            <button
-              className="column-add-slot"
-              type="button"
-              onClick={() => {
-                const name = window.prompt('New column name', 'New column');
-                if (name && name.trim()) handleAddColumn(name.trim());
-              }}
-              title="Add a new column to this snapshot"
-            >
-              <span className="column-add-slot-plus">+</span>
-              <span>Add column</span>
-            </button>
-          </div>
+          {/* Horizontal SortableContext: lets the columns be
+              drag-reordered among themselves. Nested inside each
+              column there's a separate vertical SortableContext for
+              its cards — dnd-kit is happy with nested contexts as
+              long as ids don't collide (col_* vs card_*). */}
+          <SortableContext
+            items={currentSnapshot.layout.columns.map((c) => c.id)}
+            strategy={horizontalListSortingStrategy}
+          >
+            <div className="board">
+              {currentSnapshot.layout.columns.map((col) => (
+                <Column
+                  key={col.id}
+                  column={col}
+                  cards={col.cardIds
+                    .map((id) => cardsMap.get(id))
+                    .filter(Boolean)}
+                  onRename={handleRenameColumn}
+                  onDelete={handleDeleteColumn}
+                  onEditCard={handleEditCard}
+                  onDeleteCard={handleDeleteCard}
+                />
+              ))}
+              {/* Inline "add column" slot — visible both when empty and
+                  when populated, so users don't need to hunt for the
+                  toolbar button. */}
+              <button
+                className="column-add-slot"
+                type="button"
+                onClick={() => {
+                  const name = window.prompt('New column name', 'New column');
+                  if (name && name.trim()) handleAddColumn(name.trim());
+                }}
+                title="Add a new column to this snapshot"
+              >
+                <span className="column-add-slot-plus">+</span>
+                <span>Add column</span>
+              </button>
+            </div>
+          </SortableContext>
 
           <SidePanel
             cardIds={currentSnapshot.layout.unplacedCardIds.filter((id) =>
@@ -251,8 +309,18 @@ export default function Board() {
           />
         </div>
 
-        <DragOverlay>
-          {activeCard ? <CardPreview card={activeCard} /> : null}
+        {/* `dropAnimation={null}` kills dnd-kit's default "fly the
+            overlay back to the sortable node's resting position"
+            animation on drop. That animation is what made drops feel
+            like the card was replaying its trip from the source —
+            very disorienting when you drop across containers. With
+            null, the overlay just vanishes at the cursor and the
+            reactive snapshot re-render puts the card at its new
+            location instantly. */}
+        <DragOverlay dropAnimation={null}>
+          {activeType === 'card' && activeCard ? (
+            <CardPreview card={activeCard} />
+          ) : null}
         </DragOverlay>
       </DndContext>
 

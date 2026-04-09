@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useDroppable } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import Card from './Card.jsx';
 
 export default function Column({
@@ -11,7 +15,25 @@ export default function Column({
   onEditCard,
   onDeleteCard,
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: column.id });
+  // The column is itself sortable (so users can drag-reorder Yes/No).
+  // `useSortable` includes `useDroppable` under the hood, so the same
+  // node is still a valid drop target for CARDS — Board.jsx's custom
+  // collisionDetection makes sure card-drags and column-drags only see
+  // the droppables they care about.
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+    isOver,
+    active,
+  } = useSortable({
+    id: column.id,
+    data: { type: 'column' },
+  });
+
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(column.name);
 
@@ -29,8 +51,47 @@ export default function Column({
     setEditing(false);
   }
 
+  // Only light up as a "card drop target" when a CARD is being dragged,
+  // not when another column is being dragged over this one.
+  const activeType = active?.data.current?.type;
+  const isCardOver = isOver && activeType === 'card';
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    // Source column fades while it's being moved, matching the Card
+    // behavior. The DragOverlay is intentionally disabled for columns
+    // so the column itself slides under the cursor instead of a clone.
+    opacity: isDragging ? 0.4 : 1,
+  };
+
   return (
-    <div ref={setNodeRef} className={`column ${isOver ? 'column-over' : ''}`}>
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`column ${isCardOver ? 'column-over' : ''} ${
+        isDragging ? 'column-dragging' : ''
+      }`}
+    >
+      {/* Dedicated drag rail at the very top of the column.
+          Only this element carries the dnd-kit listeners/attributes,
+          so clicking inside the column (rename, delete column, pick
+          up a card, etc.) never accidentally starts a column drag.
+          The rail is subtle by default and lights up on hover so the
+          affordance is discoverable without being visually loud. */}
+      <div
+        className="column-drag-rail"
+        {...listeners}
+        {...attributes}
+        role="button"
+        aria-label={`Drag to reorder column ${column.name}`}
+        title="Drag to reorder column"
+      >
+        <span className="column-drag-rail-dots" aria-hidden="true">
+          ⋮⋮
+        </span>
+      </div>
+
       <div className="column-header">
         {editing ? (
           <input

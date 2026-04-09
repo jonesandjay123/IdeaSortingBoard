@@ -53,7 +53,13 @@ export default function Card({ card, onDelete, onEdit }) {
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: card.id });
+  } = useSortable({
+    id: card.id,
+    // `type` lets Board.jsx branch dragEnd logic (card vs column) and
+    // lets its custom collisionDetection filter out non-matching
+    // droppables.
+    data: { type: 'card' },
+  });
 
   const style = {
     transform: CSS.Transform.toString(transform),
