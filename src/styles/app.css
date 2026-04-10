@@ -9,12 +9,14 @@
   /* Backgrounds / surfaces — deep violet-tinted dark.
      Three levels of depth so the hierarchy reads cleanly:
        page < toolbar/column < card
-     Each step lifts luminance by roughly 5% toward violet. */
-  --color-bg: #13111c;
-  --color-surface: #1d1a2e;
-  --color-surface-raised: #27223a;
-  --color-border: #322b4d;
-  --color-border-strong: #443c66;
+     Each step lifts luminance by roughly 5% toward violet.
+     Pushed slightly more saturated/violet (vs. neutral near-black)
+     so the brand violet shows up at rest, not only on hover. */
+  --color-bg: #171327;
+  --color-surface: #221c38;
+  --color-surface-raised: #2e2747;
+  --color-border: #38305a;
+  --color-border-strong: #4d4378;
 
   /* Text — slight violet tint so it harmonizes with the surfaces */
   --color-text: #ebe7f5;
@@ -35,16 +37,33 @@
      Columns are clearly lifted from the board bg; cards are
      clearly lifted from the columns. Hover/drop uses a saturated
      violet so it feels alive. */
-  --color-column-bg: #221d38;
-  --color-column-over: #3a2d6b;
-  --color-unplaced-bg: #2a1f3a;   /* warm wine purple — cosy contrast */
-  --color-unplaced-over: #3d2c52;
-  /* Cards are deep burnt orange so they pop off the violet board
-     without looking neon. Three-stop scale:
-       base (resting) < hover (slightly lifted) < border (warm rust) */
-  --color-card-bg: #5a2d15;
-  --color-card-bg-hover: #6b3419;
-  --color-card-border: #7a3b1a;
+  --color-column-bg: #2a2348;
+  --color-column-over: #43348a;
+  --color-unplaced-bg: #312449;   /* warm wine purple — cosy contrast */
+  --color-unplaced-over: #463260;
+  /* Cards are terracotta — warm burnt orange that's lifted enough
+     out of "muddy brown" territory to actually read as alive against
+     the violet board. Three-stop scale:
+       base (resting) < hover (slightly lifted) < border (rust).
+     Tuned slightly darker than pure terracotta so pure white text
+     gets ~7:1 contrast and the translation (75% white) stays readable. */
+  --color-card-bg: #964419;
+  --color-card-bg-hover: #ad5220;
+  --color-card-border: #d97a3a;
+  /* Card-local text colors. Hardcoded to white in dark mode (the
+     global --color-text has a violet tint that reads grey on orange).
+     Light mode overrides these below. */
+  --color-card-text: #ffffff;
+  --color-card-text-muted: rgba(255, 255, 255, 0.78);
+  --color-card-text-subtle: rgba(255, 255, 255, 0.55);
+  /* Card-local badge tag — soft dark pill that works on the orange
+     base, instead of a heavy violet block. */
+  --color-card-badge-bg: rgba(0, 0, 0, 0.28);
+  --color-card-badge-text: rgba(255, 255, 255, 0.88);
+  /* Subtle veils for hover/divider on the card body, neutral so they
+     don't muddy the orange. */
+  --color-card-veil: rgba(0, 0, 0, 0.18);
+  --color-card-veil-strong: rgba(0, 0, 0, 0.3);
   --color-drop-zone-bg: rgba(139, 92, 246, 0.06);
 
   /* Input surfaces (sunken into toolbar/modal) */
@@ -102,6 +121,15 @@
   --color-card-bg: #ffffff;
   --color-card-bg-hover: #f9fafb;
   --color-card-border: #e4e7ec;
+  /* Card-local text/badge — in light mode the card is white so we
+     fall back to the regular text scale (no need to invert). */
+  --color-card-text: #1a1d23;
+  --color-card-text-muted: #6b7280;
+  --color-card-text-subtle: #9aa1ac;
+  --color-card-badge-bg: #f1f3f7;
+  --color-card-badge-text: #4b5563;
+  --color-card-veil: rgba(16, 24, 40, 0.05);
+  --color-card-veil-strong: rgba(16, 24, 40, 0.1);
   --color-drop-zone-bg: rgba(255, 255, 255, 0.4);
 
   --color-input-bg: #ffffff;
@@ -563,45 +591,52 @@ button {
 }
 
 .card-lang-badge {
+  display: inline-block;
+  align-self: flex-start;
   font-size: 10px;
   font-weight: 600;
-  color: var(--color-text-muted);
-  background: var(--color-bg);
-  padding: 2px 6px;
-  border-radius: 4px;
-  letter-spacing: 0.02em;
+  color: var(--color-card-badge-text);
+  background: var(--color-card-badge-bg);
+  padding: 2px 9px;
+  border-radius: 999px;
+  letter-spacing: 0.04em;
+  line-height: 1.5;
 }
 
 .card-lang-badge.small {
   font-size: 9px;
-  padding: 1px 5px;
+  padding: 1px 8px;
 }
 
 .card-text {
-  font-size: 14px;
-  color: var(--color-text);
-  line-height: 1.45;
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--color-card-text);
+  line-height: 1.5;
   word-break: break-word;
   white-space: pre-wrap;
+  /* Slight downward breathing room before the translation block. */
+  margin-bottom: 2px;
 }
 
 .card-translation {
-  margin-top: 8px;
-  padding-top: 8px;
-  /* Use the card-specific border so the divider harmonizes with the
-     card color (orange in dark mode, light gray in light mode) instead
-     of reading as a muddy purple stripe on the orange background. */
-  border-top: 1px dashed var(--color-card-border);
-  font-size: 12px;
-  color: var(--color-text-muted);
-  line-height: 1.4;
+  margin-top: 14px;
+  padding-top: 12px;
+  /* Soft neutral veil instead of the rust border — keeps the divider
+     from competing with the card's outer border for attention. */
+  border-top: 1px solid var(--color-card-veil);
+  /* Same size as the source text. Hierarchy comes from the muted
+     text color (78% white) and the badge above, not from font size. */
+  font-size: 14.5px;
+  color: var(--color-card-text-muted);
+  line-height: 1.5;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
 }
 
 .card-translation .loading {
-  color: var(--color-text-subtle);
+  color: var(--color-card-text-subtle);
   font-style: italic;
 }
 
@@ -615,11 +650,10 @@ button {
   justify-content: flex-end;
   gap: 2px;
   padding: 3px 6px 4px;
-  /* Same rationale as .card-translation — match the card's own border
-     so the action bar blends into the card rather than looking like a
-     stripe of a different color. */
-  border-top: 1px solid var(--color-card-border);
-  background: var(--color-drop-zone-bg);
+  /* Neutral veil divider + tint, so the action bar blends into the
+     card instead of fighting it with a violet stripe over orange. */
+  border-top: 1px solid var(--color-card-veil);
+  background: var(--color-card-veil);
 }
 
 .card-action-btn {
@@ -628,7 +662,7 @@ button {
   padding: 0;
   background: transparent;
   border: none;
-  color: var(--color-text-muted);
+  color: var(--color-card-text-muted);
   cursor: pointer;
   border-radius: 4px;
   font-size: 12px;
@@ -639,8 +673,8 @@ button {
 }
 
 .card-action-btn:hover {
-  background: var(--color-border);
-  color: var(--color-text);
+  background: var(--color-card-veil-strong);
+  color: var(--color-card-text);
 }
 
 .card-action-btn.danger:hover {

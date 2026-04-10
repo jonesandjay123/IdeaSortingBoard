@@ -29,17 +29,17 @@ questions.
 - **Committed so far:** initial scaffold → Gemini integration →
   first CSS pass (violet palette, side-panel drag-resize, centered
   board, widened columns, inline "+ Add column" slot, dark mode as
-  default).
-- **Pending commit at time of writing (session 2026-04-09 evening):**
-  - `DragOverlay` has `dropAnimation={null}` — kills the jarring
-    "replay the trip" snap-back the library does by default when you
-    drop a card.
-  - Columns are now drag-reorderable via a dedicated grip rail at
-    the very top of each column (new `.column-drag-rail` element,
-    only that element carries the sortable listeners so nothing in
-    the column body can accidentally start a column drag).
-  - Card palette switched to deep burnt-orange so cards pop against
-    the violet board.
+  default) → column drag-reorder via top grip rail +
+  `DragOverlay dropAnimation={null}` (kills the snap-back replay) +
+  burnt-orange cards → **palette + card-text refresh (session
+  2026-04-10)**: pushed bg/columns slightly more violet, lifted
+  cards from muddy `#5a2d15` burnt-brown to terracotta `#964419`,
+  introduced a card-aware text/badge scale (`--color-card-text`,
+  `--color-card-text-muted`, `--color-card-badge-bg`, etc.) so card
+  text is pure white in dark mode without affecting light mode, and
+  switched the language label from a heavy violet block to a soft
+  rounded pill. Source and translation are now the same font size;
+  hierarchy comes from white-alpha, not size.
 - **Sandbox caveat:** the Cowork sandbox cannot reach
   `registry.npmjs.org` (E403), so I can't run `npm install` or
   `npm run dev` in here. I only syntax-check with the globally
@@ -291,25 +291,61 @@ onto the "unplaced" pool (worse). `Board.jsx` defines a
 
 ### Dark palette shape (matters for anyone editing colors)
 
-- **Board/surface layers (deep violet):** `--color-bg` `#13111c` →
-  `--color-surface` `#1d1a2e` → `--color-column-bg` `#221d38`. Three
-  luminance stops so the hierarchy reads cleanly without much
-  contrast.
+- **Board/surface layers (deep violet):** `--color-bg` `#171327` →
+  `--color-surface` `#221c38` → `--color-surface-raised` `#2e2747` →
+  `--color-column-bg` `#2a2348`. Four luminance stops so the
+  hierarchy reads cleanly. The whole stack is intentionally pushed a
+  little more saturated/violet (vs. neutral near-black) so the brand
+  violet shows up at rest, not only on hover. Borders sit on the
+  same scale: `--color-border` `#38305a`, `--color-border-strong`
+  `#4d4378`.
 - **Brand (violet-500ish):** `--color-primary` `#8b5cf6`, hover
   `--color-primary-hover` `#a78bfa`, soft tint `--color-primary-soft`
-  `rgba(139,92,246,0.22)`.
-- **Cards (deep burnt orange — intentional warm-on-cool):**
-  `--color-card-bg` `#5a2d15`, hover `--color-card-bg-hover`
-  `#6b3419`, border `--color-card-border` `#7a3b1a`. Dividers *inside*
-  the card (`.card-translation` border-top, `.card-action-bar`
-  border-top) use `--color-card-border` — do **not** swap them for
-  the generic `--color-border`, it reads as a muddy gray stripe on
-  orange.
+  `rgba(139,92,246,0.22)`. Used for the toolbar primary button,
+  focus rings, hover states, and the column drag-rail's "lit" state.
+- **Cards (terracotta — intentional warm-on-cool):**
+  `--color-card-bg` `#964419`, hover `--color-card-bg-hover`
+  `#ad5220`, border `--color-card-border` `#d97a3a` (vivid rust that
+  works as a glow against the violet board). The base is tuned dark
+  enough that pure white text gets ~7:1 contrast — if you push it
+  brighter than `~#a04a1c` the white text starts to wash out.
+- **Card-aware text scale (DO NOT use the global `--color-text*` on
+  cards).** The global text scale has a violet tint that reads grey
+  on orange. Cards use their own scale, which is hardcoded to white
+  in dark mode and falls back to the regular grey scale in light
+  mode (where cards are white):
+  - `--color-card-text` — main source text (`#ffffff` dark / `#1a1d23`
+    light). Used by `.card-text`. Source and translation are now the
+    **same font size** (`14.5px`); hierarchy comes from this color
+    scale, not from font size.
+  - `--color-card-text-muted` — translation text (`rgba(255,255,255,
+    0.78)` dark). Used by `.card-translation`. If the user wants the
+    translation more prominent push toward `0.85`; less prominent
+    toward `0.7`.
+  - `--color-card-text-subtle` — "Translating…" loading state.
+- **Card-aware badge tag.** `--color-card-badge-bg`
+  `rgba(0,0,0,0.28)` + `--color-card-badge-text`
+  `rgba(255,255,255,0.88)`. Used by `.card-lang-badge`, which is now
+  a small rounded pill (`border-radius: 999px`), not the previous
+  square violet block. Works on both the orange dark card and the
+  white light card without per-theme branching beyond the variable
+  values.
+- **Card-aware veils for dividers / hover surfaces.**
+  `--color-card-veil` `rgba(0,0,0,0.18)` and
+  `--color-card-veil-strong` `rgba(0,0,0,0.30)`. Used by
+  `.card-translation`'s top divider, `.card-action-bar`'s
+  background + top divider, and `.card-action-btn:hover`'s
+  background. These replaced the older choice of using
+  `--color-card-border` (rust) for in-card dividers — the rust line
+  was competing with the card's outer border for attention. Veils
+  are neutral so they don't muddy the orange.
 - **Light theme** does not inherit the orange. It overrides
   `--color-card-bg` to white (`#ffffff`), `--color-card-bg-hover` to
-  `#f9fafb`, `--color-card-border` to `#e4e7ec`. If you add new
-  `--color-card-*` variables in dark, add the corresponding light
-  overrides in the same commit.
+  `#f9fafb`, `--color-card-border` to `#e4e7ec`, and the entire
+  card-text / card-badge / card-veil scale falls back to the
+  regular neutral grey scale. **If you add a new `--color-card-*`
+  variable in dark, add the corresponding light override in the
+  same commit.**
 
 ## Pending TODOs (roughly in order of likely next steps)
 
@@ -373,6 +409,8 @@ onto the "unplaced" pool (worse). `Board.jsx` defines a
 
 ---
 
-Last updated by: Cowork Claude session, 2026-04-09 (evening —
-after adding column drag-reorder + `dropAnimation={null}` + deep
-orange card palette).
+Last updated by: Claude Code CLI session, 2026-04-10 — palette
+refresh (slightly more violet board, terracotta cards) + card-aware
+text/badge/veil scale so card text reads pure white on orange in
+dark mode without affecting light mode. Source and translation
+now share font size; hierarchy comes from white-alpha.
