@@ -1,5 +1,9 @@
 import { db, setSetting } from './database.js';
 import { translate } from '../services/translationService.js';
+import {
+  buildLayoutSnapshot,
+  generateProposal as callGeminiForProposal,
+} from '../services/proposalService.js';
 
 /**
  * All mutations go through this file. Components never touch Dexie directly.
@@ -183,24 +187,34 @@ export async function renameSnapshot(snapshotId, newName) {
 }
 
 export async function deleteSnapshot(snapshotId) {
-  // Wrap delete + currentSnapshot fallback in one transaction so
-  // useLiveQuery never sees a "current snapshot points at a deleted row"
-  // intermediate state.
-  await db.transaction('rw', db.snapshots, db.settings, async () => {
-    const all = await db.snapshots.toArray();
-    if (all.length <= 1) return; // never delete the last one
+  // Wrap delete + currentSnapshot fallback + proposal cascade in one
+  // transaction so `useLiveQuery` never sees an intermediate state
+  // where the current snapshot points at a deleted row, or proposals
+  // exist without their parent snapshot.
+  await db.transaction(
+    'rw',
+    db.snapshots,
+    db.settings,
+    db.proposals,
+    async () => {
+      const all = await db.snapshots.toArray();
+      if (all.length <= 1) return; // never delete the last one
 
-    await db.snapshots.delete(snapshotId);
+      await db.snapshots.delete(snapshotId);
 
-    const currentRow = await db.settings.get('currentSnapshotId');
-    if (currentRow?.value === snapshotId) {
-      const remaining = all.filter((s) => s.id !== snapshotId);
-      await db.settings.put({
-        key: 'currentSnapshotId',
-        value: remaining[0].id,
-      });
+      // Cascade: a proposal without its parent snapshot is meaningless.
+      await db.proposals.where('snapshotId').equals(snapshotId).delete();
+
+      const currentRow = await db.settings.get('currentSnapshotId');
+      if (currentRow?.value === snapshotId) {
+        const remaining = all.filter((s) => s.id !== snapshotId);
+        await db.settings.put({
+          key: 'currentSnapshotId',
+          value: remaining[0].id,
+        });
+      }
     }
-  });
+  );
 }
 
 export async function switchSnapshot(snapshotId) {
@@ -317,4 +331,99 @@ export async function placeCard(snapshotId, cardId, toContainerId, toIndex = nul
   }
 
   await db.snapshots.update(snapshotId, { layout, updatedAt: Date.now() });
+}
+
+// ============================================================
+// Proposals (Gemini-generated "project idea" reports)
+// ============================================================
+
+/**
+ * Create a placeholder proposal row in `loading` state, kick off the
+ * Gemini call, and fill the row in (or flip it to `error`) when the
+ * response comes back.
+ *
+ * Returns the placeholder id synchronously so the UI can immediately
+ * select/open the new proposal and show a loading state. The actual
+ * content fills in reactively via `useLiveQuery`.
+ *
+ * Only cards that are *placed in a column* are sent to Gemini — the
+ * unplaced pool is intentionally ignored. The idea: the act of sorting
+ * is the signal, and unplaced cards haven't been judged yet.
+ */
+export async function generateProposal(snapshotId) {
+  const snap = await db.snapshots.get(snapshotId);
+  if (!snap) throw new Error('Snapshot not found');
+
+  // Build a cardId -> card map for just the cards this snapshot
+  // references, so we don't pull the whole `cards` table.
+  const neededIds = new Set();
+  for (const col of snap.layout.columns) {
+    for (const id of col.cardIds) neededIds.add(id);
+  }
+  const cardRows = await db.cards.bulkGet([...neededIds]);
+  const cardsMap = new Map();
+  for (const c of cardRows) {
+    if (c) cardsMap.set(c.id, c);
+  }
+
+  const layoutSnapshot = buildLayoutSnapshot(
+    snap.name,
+    snap.layout.columns,
+    cardsMap
+  );
+
+  if (layoutSnapshot.totalCards === 0) {
+    throw new Error('尚未把任何卡片放進欄位，先把一些想法拖進欄位吧。');
+  }
+
+  // Pull recent proposals for this snapshot so we can ask Gemini to
+  // avoid repeating past angles. Cap at 5 (plenty of signal, tiny
+  // prompt cost).
+  const priorDone = (
+    await db.proposals.where('snapshotId').equals(snapshotId).toArray()
+  )
+    .filter((p) => p.status === 'done' && p.content)
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 5)
+    .map((p) => ({
+      title: p.content.title,
+      rationale: p.content.rationale,
+    }));
+
+  const id = uid('prop');
+  const now = Date.now();
+  const placeholder = {
+    id,
+    snapshotId,
+    snapshotName: snap.name,
+    status: 'loading',
+    createdAt: now,
+    model: 'gemini-2.5-flash',
+    layoutSnapshot, // frozen at generation time — NEVER mutate
+    content: null,
+    error: null,
+  };
+  await db.proposals.add(placeholder);
+
+  // Fire and forget — UI picks up the result via useLiveQuery.
+  callGeminiForProposal(layoutSnapshot, priorDone)
+    .then(async (content) => {
+      await db.proposals.update(id, {
+        status: 'done',
+        content,
+      });
+    })
+    .catch(async (err) => {
+      console.error('Proposal generation failed:', err);
+      await db.proposals.update(id, {
+        status: 'error',
+        error: String(err?.message || err),
+      });
+    });
+
+  return id;
+}
+
+export async function deleteProposal(proposalId) {
+  await db.proposals.delete(proposalId);
 }

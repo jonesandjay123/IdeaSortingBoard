@@ -33,6 +33,7 @@ import Toolbar from './Toolbar.jsx';
 import Column from './Column.jsx';
 import SidePanel from './SidePanel.jsx';
 import CardModal from './CardModal.jsx';
+import ProposalModal from './ProposalModal.jsx';
 import { CardPreview } from './Card.jsx';
 
 export default function Board() {
@@ -69,6 +70,7 @@ export default function Board() {
   // Modal state.
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCard, setEditingCard] = useState(null);
+  const [proposalsOpen, setProposalsOpen] = useState(false);
 
   // DragOverlay state. `activeType` is 'card' | 'column' | null and is
   // used both to drive the overlay and to pick the right branch in
@@ -238,6 +240,7 @@ export default function Board() {
         onRenameSnapshot={renameSnapshot}
         onDeleteSnapshot={deleteSnapshot}
         onAddColumn={handleAddColumn}
+        onOpenProposals={() => setProposalsOpen(true)}
       />
 
       <DndContext
@@ -334,6 +337,12 @@ export default function Board() {
         initial={editingCard}
         defaultSourceLang={defaultSourceLang}
         defaultTargetLang={defaultTargetLang}
+      />
+
+      <ProposalModal
+        open={proposalsOpen}
+        snapshot={currentSnapshot}
+        onClose={() => setProposalsOpen(false)}
       />
     </div>
   );

@@ -95,7 +95,7 @@ Likely bugs that still need real-browser eyes:
 
 ## Data model — invariants (read before touching `db/`)
 
-Three Dexie tables:
+Four Dexie tables (db version **2**):
 
 1. **`cards`** — content of each idea card.
    `{ id, sourceLang, sourceText, targetLang, targetText, translationStatus, createdAt, updatedAt }`
@@ -113,6 +113,9 @@ Three Dexie tables:
 
 3. **`settings`** — key/value bag (`currentSnapshotId`,
    `defaultSourceLang`, `defaultTargetLang`, `seeded`).
+4. **`proposals`** — Gemini-generated "抽企劃卡" project suggestions.
+   One row per generation. See the "Proposals" section below for the
+   full shape and invariants.
 
 **Invariants that must hold at all times:**
 
@@ -124,10 +127,62 @@ Three Dexie tables:
   maintain this.
 - `currentSnapshotId` must always point at a snapshot that still exists.
   `deleteSnapshot` wraps this in a transaction to avoid a "pointing at a
-  deleted row" moment that `useLiveQuery` could observe.
+  deleted row" moment that `useLiveQuery` could observe. The same
+  transaction **cascade-deletes** that snapshot's proposals, because a
+  proposal without its parent snapshot is meaningless.
+- **Proposals freeze their input.** Every proposal row stores a
+  `layoutSnapshot` — a plain copy of the column names and the
+  `sourceText` of each placed card at generation time. Do NOT
+  retroactively rewrite it when cards or snapshots change. The user
+  is supposed to be able to re-arrange the board and still read old
+  proposals with their original "this is what I was looking at"
+  context. `deleteCard` intentionally does NOT sweep proposals.
 - Seeding is **idempotent and deduped** — `seedData.js` uses a
   module-level `seedPromise` to survive React 18 StrictMode's
   double-invoke of `useEffect`. Don't collapse this.
+
+### Proposals table — shape
+
+```
+{
+  id:             string,
+  snapshotId:     string,       // parent snapshot
+  snapshotName:   string,       // cached at generation time
+  status:         'loading' | 'done' | 'error',
+  createdAt:      number,
+  model:          string,       // e.g. 'gemini-2.5-flash'
+  layoutSnapshot: {              // frozen — never mutated
+    snapshotName: string,
+    totalCards:   number,
+    columns: [{ name: string, cards: string[] }]
+  },
+  content: null | {
+    title:     string,
+    rationale: string,
+    mvp:       string[],         // 3 bullets
+    whyNow:    string,           // one sentence
+    tags:      string[]          // 2-4
+  },
+  error: null | string
+}
+```
+
+- `generateProposal(snapshotId)` in `actions.js` writes the row in
+  `loading` state, fires the Gemini call, and flips the row to
+  `done` / `error` when the response arrives. The UI picks up the
+  state change via `useLiveQuery`.
+- **Unplaced cards are intentionally excluded from the prompt.** The
+  whole point of the feature is "judge the user's *sorting* as a
+  signal", so a card that hasn't been placed into any column doesn't
+  count. If you add a future "include pool too" toggle, do it in
+  `proposalService.buildLayoutSnapshot` — NOT by mutating the
+  frozen `layoutSnapshot` of existing rows.
+- `generateProposal` also pulls the 5 most recent `done` proposals
+  for the same snapshot and sends their titles + one-line rationales
+  to Gemini as an "avoid these angles" list. This is what makes
+  "反覆刷反覆抽卡" actually feel like a re-roll instead of a
+  re-phrasing. Temperature is set to 1.1 on the Gemini call for the
+  same reason.
 
 ## File map (where does X live)
 
@@ -136,18 +191,22 @@ src/
 ├── main.jsx                   React entry
 ├── App.jsx                    Seeding gate (awaits ensureSeeded) + mounts <Board>
 ├── db/
-│   ├── database.js            Dexie schema + getSetting/setSetting helpers
-│   └── actions.js             EVERY mutation (cards, snapshots, columns, placement)
+│   ├── database.js            Dexie schema (v2, adds `proposals`) + getSetting/setSetting
+│   └── actions.js             EVERY mutation (cards, snapshots, columns, placement, proposals)
 ├── services/
-│   └── translationService.js  Gemini 2.5 Flash translate() via @google/genai
+│   ├── translationService.js  Gemini 2.5 Flash translate() via @google/genai
+│   └── proposalService.js     Gemini 2.5 Flash generateProposal() + buildLayoutSnapshot()
 ├── lib/
 │   ├── seedData.js            First-run defaults (deduped via seedPromise)
-│   └── theme.js               localStorage-backed dark/light toggle
+│   ├── theme.js               localStorage-backed dark/light toggle
+│   └── useSpeechRecognition.js  Chrome Web Speech API hook (no tokens, no deps)
 ├── components/
 │   ├── Board.jsx              DndContext + horizontal SortableContext for
 │   │                          columns + custom collisionDetection + dragEnd
 │   │                          routing (card vs column) + inline "+ Add column"
+│   │                          + owns ProposalModal open state
 │   ├── Toolbar.jsx            Snapshot selector + theme toggle + add/rename/delete
+│   │                          + 💡 Proposals button
 │   ├── Column.jsx             Sortable column (useSortable w/ data:{type:'column'})
 │   │                          + top drag-rail grip + nested vertical
 │   │                          SortableContext for its cards
@@ -156,7 +215,12 @@ src/
 │   ├── SidePanel.jsx          Right-side unplaced-cards pool; useDroppable with
 │   │                          data:{type:'unplaced'}; drag-to-resize handle
 │   │                          (width persisted in localStorage)
-│   └── CardModal.jsx          Create/edit modal (⌘/Ctrl+Enter submits, Esc closes)
+│   ├── CardModal.jsx          Create/edit modal (⌘/Ctrl+Enter submits, Esc closes)
+│   │                          + mic button backed by useSpeechRecognition
+│   └── ProposalModal.jsx      Full-screen "project proposals" reader: left
+│                              history list (click to open, × to delete),
+│                              right article reader, 🎲 "抽一張新的" button
+│                              that calls generateProposal(snapshotId)
 └── styles/
     └── app.css                All styles; :root is DARK; [data-theme="light"] overrides
 ```
@@ -347,6 +411,54 @@ onto the "unplaced" pool (worse). `Board.jsx` defines a
   variable in dark, add the corresponding light override in the
   same commit.**
 
+## Proposals feature ("抽企劃卡")
+
+Main teaching extension shipped 2026-04-10. Lets the user press a
+button in the toolbar and have Gemini read the current snapshot's
+**placed** cards (NOT the unplaced pool) and produce a concrete
+project-idea report: title, rationale, 3 MVP bullets, a "why now"
+line, and 2–4 tags. Each press creates a new `proposals` row; the
+history is kept so the user can reread, compare, and re-roll.
+
+Invariants / gotchas:
+
+- **Frozen input.** Every proposal stores a `layoutSnapshot` at
+  generation time. Reader renders that snapshot at the bottom under
+  "根據當時 board 上的這些卡片" so the user can always see what the
+  board looked like when the suggestion was made. Do not recompute
+  that from live data — the point is that it survives later edits.
+- **Don't sweep on card delete.** `deleteCard` leaves proposals
+  alone. `deleteSnapshot` DOES cascade-delete proposals for that
+  snapshot (inside the same transaction).
+- **Avoid-repeat prompting.** `generateProposal` pulls the last 5
+  `done` proposals for the same snapshot and sends their title +
+  rationale as "AVOID these angles". Combined with temperature 1.1,
+  this is what makes re-rolls feel like re-rolls instead of
+  paraphrases.
+- **Token cost is tiny.** Typical prompt < 2 KB, response < 2 KB.
+  Fine to spam.
+
+## Voice input (mic button in CardModal)
+
+`src/lib/useSpeechRecognition.js` wraps Chrome's Web Speech API
+(`webkitSpeechRecognition`). Chrome-only by design — no cross-browser
+support fallback, no polyfill. Runs in-browser so it **does not
+consume any Gemini / AI tokens**.
+
+- Finalized chunks are appended to the textarea via an
+  `onFinalChunk` callback; interim text is shown as a ghost line
+  below the textarea so the user can still freely edit the
+  already-finalized content without flicker.
+- Recognition language is derived from the source-lang picker via
+  `SPEECH_LANG_MAP` (`zh-Hant` → `zh-TW`, `ja` → `ja-JP`, etc).
+  Changing source-lang mid-modal stops the current session.
+- The mic button is only rendered when `window.SpeechRecognition ||
+  window.webkitSpeechRecognition` exists, so other browsers just
+  don't see it.
+- If you need to replace the hook with a different STT backend,
+  keep the same contract (`{ supported, listening, interim, error,
+  start, stop, toggle }` + `onFinalChunk` callback).
+
 ## Pending TODOs (roughly in order of likely next steps)
 
 1. **Real-browser smoke test of the latest changes** — Gemini is
@@ -409,8 +521,12 @@ onto the "unplaced" pool (worse). `Board.jsx` defines a
 
 ---
 
-Last updated by: Claude Code CLI session, 2026-04-10 — palette
-refresh (slightly more violet board, terracotta cards) + card-aware
-text/badge/veil scale so card text reads pure white on orange in
-dark mode without affecting light mode. Source and translation
-now share font size; hierarchy comes from white-alpha.
+Last updated by: Claude Code CLI session, 2026-04-10 — two new
+features: (1) **proposals** — toolbar 💡 button opens a full-screen
+modal where Gemini generates project-idea reports from the current
+board's placed cards; each generation is saved into a new
+`proposals` Dexie table (db v2), history list on the left with
+delete, reader article on the right, 🎲 "抽一張新的" re-rolls with
+an avoid-repeat list of prior angles fed back into the prompt.
+(2) **voice input** — Chrome Web Speech API hook wired into
+CardModal with a pulsing-red mic button; zero token cost.

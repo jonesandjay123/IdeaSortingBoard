@@ -9,6 +9,7 @@ export default function Toolbar({
   onRenameSnapshot,
   onDeleteSnapshot,
   onAddColumn,
+  onOpenProposals,
 }) {
   const current = snapshots.find((s) => s.id === currentSnapshotId);
 
@@ -104,6 +105,13 @@ export default function Toolbar({
           aria-label="Toggle color theme"
         >
           {theme === 'dark' ? '☀️' : '🌙'}
+        </button>
+        <button
+          className="toolbar-btn"
+          onClick={onOpenProposals}
+          title="根據 board 上的排列讓 Gemini 抽一個 project 建議"
+        >
+          💡 Proposals
         </button>
         <button
           className="toolbar-btn primary"
