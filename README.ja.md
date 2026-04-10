@@ -14,16 +14,38 @@
 
 ## 起動方法
 
-**Node 18 以上**が必要です（`@google/genai` SDK の要件）。
+### 事前準備
+
+- **[Node.js](https://nodejs.org/) 18 以上**（`@google/genai` SDK の
+  要件）。公式サイトから LTS 版をダウンロードするだけで OK。
+  インストール後、ターミナルで `node -v` を実行して `v18.xxx` 以上
+  が表示されれば成功です。
+- **Chrome ブラウザを推奨**。他のブラウザでも起動はでき、翻訳と
+  プロジェクト提案ガチャは正常に使えますが、**音声入力のマイク
+  ボタンは Chrome 系（Chrome / Edge）でしか表示されません**。他の
+  ブラウザではそのボタンが自動的に非表示になります。
+
+### 手順
 
 ```bash
+# 1. repo を自分の PC にダウンロード
+git clone https://github.com/jonesandjay123/IdeaSortingBoard.git
+cd IdeaSortingBoard
+
+# 2. 依存パッケージをインストール
 npm install
+
+# 3. Gemini API キーを設定
 cp .env.example .env
-# .env の VITE_GEMINI_API_KEY を自分のキーに書き換える
+# 好きなテキストエディタで .env を開き、VITE_GEMINI_API_KEY の値を
+# 自分で取得したキーに書き換える（キーの取得先は次のセクション）
+
+# 4. dev server を起動
 npm run dev
 ```
 
-<http://localhost:5173> を開いてください。
+<http://localhost:5173> を開いてください。dev server を止めるときは
+ターミナルで Ctrl+C です。
 
 初回起動時に、繁体字中国語のデモカード 5 枚と既定の snapshot 3 つが
 自動で seed されます。右側が未分類のカードプール、中央が column で、

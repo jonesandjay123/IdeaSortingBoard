@@ -12,16 +12,36 @@
 
 ## 怎麼跑起來
 
-需要 **Node 18 以上**(`@google/genai` SDK 的要求)。
+### 事前準備
+
+- **[Node.js](https://nodejs.org/) 18 以上**(`@google/genai` SDK 的
+  要求)。直接到官網下載 LTS 版本就好,裝完以後在 terminal 輸入
+  `node -v` 可以驗證版本,顯示 `v18.xxx` 或更高就成功了。
+- 推薦用 **Chrome 瀏覽器**。其他瀏覽器也跑得起來、翻譯跟抽企劃卡都
+  能正常用,但**語音輸入的麥克風按鈕只有 Chrome 系(Chrome / Edge)
+  看得到**,其他瀏覽器上那顆按鈕會直接隱藏。
+
+### 步驟
 
 ```bash
+# 1. 把 repo 下載到自己電腦
+git clone https://github.com/jonesandjay123/IdeaSortingBoard.git
+cd IdeaSortingBoard
+
+# 2. 裝依賴套件
 npm install
+
+# 3. 設定 Gemini API 金鑰
 cp .env.example .env
-# 把 .env 裡的 VITE_GEMINI_API_KEY 換成你自己的金鑰
+# 用任何文字編輯器打開 .env,把 VITE_GEMINI_API_KEY 的值
+# 換成你自己申請的金鑰(下一節有申請連結)
+
+# 4. 啟動 dev server
 npm run dev
 ```
 
-打開 http://localhost:5173。
+打開 <http://localhost:5173>。要停止 dev server 就在 terminal 按
+Ctrl+C。
 
 第一次載入會自動 seed 5 張繁中 demo 卡 + 三個預設 snapshot。右邊是
 未分類的小卡池,中間是 column,把卡拖進你想放的欄位就行。
