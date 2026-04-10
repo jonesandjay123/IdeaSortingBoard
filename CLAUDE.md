@@ -156,6 +156,12 @@ Four Dexie tables (db version **2**):
     totalCards:   number,
     columns: [{ name: string, cards: string[] }]
   },
+  userGuidance:   null | string, // free-form steering the user typed/spoke
+                                 // for THIS roll. null = default creative
+                                 // spin, string = hard directional override
+                                 // that was injected into the Gemini prompt.
+                                 // Stored so the reader can display it as
+                                 // "🎯 你的引導" on historical proposals.
   content: null | {
     title:     string,
     rationale: string,
@@ -432,9 +438,28 @@ Invariants / gotchas:
   snapshot (inside the same transaction).
 - **Avoid-repeat prompting.** `generateProposal` pulls the last 5
   `done` proposals for the same snapshot and sends their title +
-  rationale as "AVOID these angles". Combined with temperature 1.1,
+  rationale as "AVOID these angles". Combined with temperature 1.3,
   this is what makes re-rolls feel like re-rolls instead of
   paraphrases.
+- **Creative prompt, not literal.** The base prompt was rewritten
+  after the first live test showed Gemini producing boring literal
+  concatenations of the cards ("your cards are about Gemma + Pi +
+  low-latency, so: low-latency voice assistant on a Pi"). The
+  current prompt explicitly asks for a NON-OBVIOUS angle: unusual
+  target user, metaphor, cross-domain mashup, or playful reframing.
+  At least one twist dimension must be present. Temperature is
+  1.3 (was 1.1) to give the creative instructions room to act.
+- **Optional user guidance (steering).** ProposalModal has a
+  textarea + mic below the spin button. If the user types (or
+  speaks) something like "做成給長輩用的" or "變成一個絕對不插電
+  的玩具", it gets passed as `userGuidance` through
+  `generateProposal(snapshotId, userGuidance)` → proposalService,
+  where it's injected into the Gemini prompt as a STRONG
+  directional override (not a soft hint). The value is stored on
+  the proposal row so the reader can display "🎯 你的引導" on any
+  historical proposal that was steered. Empty = default creative
+  behavior. Cleared after each successful spin so the user doesn't
+  accidentally re-apply last round's steering.
 - **Token cost is tiny.** Typical prompt < 2 KB, response < 2 KB.
   Fine to spam.
 

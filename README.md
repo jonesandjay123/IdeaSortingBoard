@@ -168,8 +168,19 @@ translate(text, sourceLang, targetLang) => Promise<string>
 列表 hover 會出現 × 刪除。**反覆抽卡**是這個功能的靈魂:為了避免每
 次只是換句話說,`generateProposal` 會把同 snapshot 最近 5 筆已完成
 的 proposal 的 title + rationale 一起塞進 prompt,明確告訴 Gemini
-「避開這些已經講過的角度」,加上溫度拉到 1.1,讓每次抽卡真的有不同
-的方向。
+「避開這些已經講過的角度」,加上溫度拉到 1.3,讓每次抽卡真的有不同
+的方向。Prompt 本身也被刻意寫成**要求 Gemini 找一個非顯而易見的
+角度** —— 不尋常的目標用戶、隱喻、跨領域組合、或把你的限制反過來
+當特色 —— 不要只是把卡片字面加總成最直白的產品。
+
+**額外引導(選填)**:抽卡按鈕上方有一個小輸入框(支援語音輸入),
+可以用自然語言告訴 Gemini 你這次想往哪個方向走,例如「做成給長輩
+用的」、「變成一個絕對不插電的玩具」、「加上儀式感」。留空就用
+預設的創意 prompt;填了就會被當成**強力方向約束**塞進 Gemini 的
+prompt,可以明顯改變輸出風格。同一份引導也會存在 proposal 上,
+回頭看歷史時會以「🎯 你的引導」的形式顯示出來,方便比較「這張是
+當初被我怎麼 steer 出來的」。輸入框在每次成功生成後會清空,下一
+回合從頭開始。
 
 實作在 `src/services/proposalService.js`,跟 `translationService.js`
 並列但各自獨立(翻譯的 contract 很嚴格,不該混進其他 Gemini 呼叫)。

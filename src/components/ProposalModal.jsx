@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/database.js';
 import { deleteProposal, generateProposal } from '../db/actions.js';
+import useSpeechRecognition from '../lib/useSpeechRecognition.js';
 
 /**
  * Full-screen modal for viewing & managing project proposals for the
@@ -58,6 +59,36 @@ export default function ProposalModal({ open, snapshot, onClose }) {
   const [generating, setGenerating] = useState(false);
   const [spinError, setSpinError] = useState(null);
 
+  // Optional human steering for the next roll. Empty = no guidance
+  // (default creative prompt). Cleared after each successful spin so
+  // the user doesn't accidentally re-apply last round's steering.
+  const [guidanceText, setGuidanceText] = useState('');
+
+  // Voice input for the guidance field — reuses the same hook as the
+  // CardModal mic button. Finalized chunks get appended with a space
+  // separator. Interim text is shown below the textarea, NOT written
+  // into it (same reason as CardModal: avoid flicker on mid-utterance
+  // state).
+  const appendGuidanceChunk = useCallback((chunk) => {
+    const clean = chunk.trim();
+    if (!clean) return;
+    setGuidanceText((prev) => {
+      if (!prev) return clean;
+      if (/[\s\n、。！？]$/.test(prev)) return prev + clean;
+      return prev + ' ' + clean;
+    });
+  }, []);
+  const speech = useSpeechRecognition({
+    lang: 'zh-TW',
+    onFinalChunk: appendGuidanceChunk,
+  });
+  // Stop speech when the modal closes so it's not listening in the
+  // background after the user dismisses.
+  useEffect(() => {
+    if (!open && speech.listening) speech.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   // See CardModal for the full explanation — only dismiss on backdrop
   // mouseup if mousedown also landed on the backdrop. Prevents drag-
   // select inside the proposal article from closing the modal when
@@ -113,12 +144,18 @@ export default function ProposalModal({ open, snapshot, onClose }) {
 
   async function handleSpin() {
     if (!snapshotId || generating) return;
+    if (speech.listening) speech.stop();
     setGenerating(true);
     setSpinError(null);
+    const guidanceForThisRoll = guidanceText.trim();
     try {
-      const newId = await generateProposal(snapshotId);
+      const newId = await generateProposal(snapshotId, guidanceForThisRoll);
       // Switch to it immediately so the user watches it stream in.
       setSelectedId(newId);
+      // Clear the guidance input after a successful spin — next
+      // round starts clean. If the user wants the same guidance
+      // twice, they can retype it (or just paste).
+      setGuidanceText('');
     } catch (err) {
       setSpinError(String(err?.message || err));
     } finally {
@@ -184,6 +221,53 @@ export default function ProposalModal({ open, snapshot, onClose }) {
             </div>
 
             <div className="proposal-history-footer">
+              <div className="proposal-guidance">
+                <div className="proposal-guidance-label-row">
+                  <span>額外引導（選填）</span>
+                  {speech.supported && (
+                    <button
+                      type="button"
+                      className={`mic-btn ${
+                        speech.listening ? 'is-listening' : ''
+                      }`}
+                      onClick={speech.toggle}
+                      aria-label={
+                        speech.listening ? '停止語音輸入' : '開始語音輸入'
+                      }
+                      title={
+                        speech.listening
+                          ? '正在聽 — 再按一次停止'
+                          : '用說的給 Gemini 引導'
+                      }
+                    >
+                      {speech.listening ? (
+                        <>
+                          <span className="mic-dot" aria-hidden="true" />
+                          <span className="mic-label">Listening…</span>
+                        </>
+                      ) : (
+                        <>
+                          <span aria-hidden="true">🎤</span>
+                          <span className="mic-label">Voice</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+                <textarea
+                  className="proposal-guidance-input"
+                  value={guidanceText}
+                  onChange={(e) => setGuidanceText(e.target.value)}
+                  rows={3}
+                  placeholder="例如：做成給長輩用的、或變成一個絕對不插電的玩具"
+                />
+                {speech.listening && (
+                  <div className="speech-interim">
+                    {speech.interim || '正在聽你說話…'}
+                  </div>
+                )}
+              </div>
+
               {spinError && (
                 <div className="proposal-spin-error">{spinError}</div>
               )}
@@ -301,6 +385,15 @@ function ProposalReader({ proposal }) {
               #{t}
             </span>
           ))}
+        </div>
+      )}
+
+      {proposal.userGuidance && (
+        <div className="proposal-article-guidance">
+          <span className="proposal-article-guidance-label">🎯 你的引導</span>
+          <span className="proposal-article-guidance-text">
+            「{proposal.userGuidance}」
+          </span>
         </div>
       )}
 

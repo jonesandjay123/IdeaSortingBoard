@@ -127,9 +127,13 @@ function formatHistoryForPrompt(history) {
  *
  * @param {object} layoutSnapshot  output of buildLayoutSnapshot()
  * @param {{title:string, rationale:string}[]} [history]  past proposals to avoid repeating
+ * @param {string} [userGuidance]  optional free-form steering from the
+ *   user. If provided, treated as a strong directional constraint that
+ *   overrides the model's default instinct toward the most literal
+ *   interpretation of the board. Empty string = no guidance.
  * @returns {Promise<{title:string, rationale:string, mvp:string[], whyNow:string, tags:string[]}>}
  */
-export async function generateProposal(layoutSnapshot, history = []) {
+export async function generateProposal(layoutSnapshot, history = [], userGuidance = '') {
   if (layoutSnapshot.totalCards === 0) {
     throw new Error(
       'Board has no placed cards yet — put some cards into columns first.'
@@ -140,44 +144,74 @@ export async function generateProposal(layoutSnapshot, history = []) {
 
   // Prompt design notes:
   // - Traditional Chinese output because the user/student is Taiwanese.
-  //   (Could be parameterized later if needed, but defaulting to zh-Hant
-  //   matches the seeded demo cards and the user's classroom context.)
-  // - Temperature bumped so repeated generations diverge even if the
-  //   board is unchanged — that's the "反覆刷反覆抽卡" feel the user
-  //   explicitly asked for.
-  // - Structured JSON via responseMimeType so we don't have to parse
-  //   loose prose and so the UI can render a clean card.
+  // - Temperature is intentionally HIGH (1.3). Earlier version used 1.1
+  //   and the output was boringly literal: it just concatenated the
+  //   cards into "exactly what the cards say, assembled together".
+  //   The creative instructions below only work if the model has room
+  //   to diverge from the most likely next token.
+  // - The guidelines now actively push Gemini AWAY from a literal
+  //   reading. The phrase "take the user's sort seriously as a signal"
+  //   was previously read as "do exactly what the cards say". The new
+  //   framing asks for a non-obvious angle on the same raw material:
+  //   unusual target users, metaphor, cross-domain mashup, playful
+  //   reframing. The user still sees the literal output in their own
+  //   head; they want Gemini to give them what they *can't* produce
+  //   themselves.
+  // - `userGuidance` (if present) is the strongest knob in the prompt.
+  //   It's explicitly framed as a constraint that OVERRIDES the
+  //   model's default, so "make it absurd" or "for elderly users"
+  //   actually steers the output instead of being a soft hint.
+  // - Structured JSON via responseMimeType so the UI can render clean
+  //   fields without prose-parsing.
+  const guidanceBlock = userGuidance && userGuidance.trim()
+    ? `ADDITIONAL STEERING FROM THE USER — this is a STRONG directional ` +
+      `constraint that OVERRIDES your default instincts. Bend the ` +
+      `proposal hard toward this, even at the cost of literal fidelity ` +
+      `to the board:\n"${userGuidance.trim()}"\n\n`
+    : '';
+
   const prompt =
-    `You are a product-sense coach helping a beginner programmer come up ` +
-    `with a concrete project idea. The user has been sorting a pile of ` +
-    `raw ideas into columns under one classification frame. Your job is ` +
-    `to read the CURRENT board state and propose ONE concrete project ` +
-    `that takes the user's sort seriously as a signal.\n\n` +
+    `You are a creative product-sense coach helping a beginner programmer ` +
+    `with their younger sister come up with an UNEXPECTED project idea. ` +
+    `The user has sorted raw ideas into columns under one classification ` +
+    `frame. Your job is NOT to restate what the cards obviously add up ` +
+    `to — the user can already see that themselves. Your job is to find ` +
+    `a non-obvious angle that the user would NOT have thought of on ` +
+    `their own.\n\n` +
     `${formatLayoutForPrompt(layoutSnapshot)}\n\n` +
+    `${guidanceBlock}` +
     `${formatHistoryForPrompt(history)}\n\n` +
-    `Guidelines:\n` +
-    `- The proposal must be a SPECIFIC project, not a category. Not "a ` +
-    `productivity app", but a concrete product with a name and a point.\n` +
-    `- Base the proposal on the *combination* of ideas the user has ` +
-    `placed — especially those grouped together in the same column. ` +
-    `Treat the column names as the user's judgment and honor them.\n` +
-    `- Ignore ideas that were not placed into any column (they are in a ` +
-    `separate pool). If a column is empty, ignore that column too.\n` +
+    `Creative guidelines — follow all of them:\n` +
+    `- The proposal MUST be a SPECIFIC project with a named product and ` +
+    `a point, not a category or a generic "an app that does X".\n` +
+    `- **Find a twist.** Options: an unusual TARGET USER (elderly, ` +
+    `kids, night-shift workers, people in grief, hobbyists of something ` +
+    `unrelated); an unusual METAPHOR (this thing is "a X for Y"); a ` +
+    `CROSS-DOMAIN mashup (combine with music / rituals / games / ` +
+    `nature / nostalgia / etc); or a playful REFRAMING of the user's ` +
+    `constraint as a feature. At least one of these MUST be present.\n` +
+    `- Use the user's placed cards as raw material and honor the column ` +
+    `names as signals — but do NOT treat the cards as a literal spec. ` +
+    `The output should SURPRISE the user at least once.\n` +
+    `- Ignore ideas that were not placed into any column. Ignore empty ` +
+    `columns.\n` +
+    `- If past-proposal angles are listed, pick a genuinely DIFFERENT ` +
+    `angle — different target user, different metaphor, different ` +
+    `core mechanic. Do not just rephrase.\n` +
     `- MVP must be 3 bullet points, each a concrete first thing to ` +
     `build, achievable by a beginner with AI help.\n` +
-    `- "whyNow" should be a single crisp sentence explaining why this ` +
-    `specific combination of placed ideas is interesting right now.\n` +
-    `- 2 to 4 short tags (single words or short phrases).\n` +
+    `- "whyNow" should be a single crisp sentence. Ideally it makes the ` +
+    `user nod at something they hadn't noticed about their own cards.\n` +
+    `- 2 to 4 short tags. Try to include at least one tag that hints ` +
+    `at the twist (e.g. "給長輩", "玩具感", "儀式感"), not just tech.\n` +
     `- Write ALL fields in Traditional Chinese (繁體中文 / 台灣用語).\n` +
-    `- Be playful but specific. The user is going to read this with ` +
-    `their younger sister and they want to feel "oh, that's a real idea".\n` +
-    `- If past-proposal angles are listed above, pick a genuinely ` +
-    `different angle — different product type, different user, or ` +
-    `different core mechanic.\n\n` +
+    `- Tone: playful, specific, slightly weird. The user wants to read ` +
+    `this with their younger sister and feel "oh, I never would have ` +
+    `thought of that".\n\n` +
     `Return ONLY JSON matching this schema (no markdown fences, no prose):\n` +
     `{\n` +
     `  "title": string,           // short project name, Traditional Chinese\n` +
-    `  "rationale": string,        // 2-4 sentences, why this project fits the sort\n` +
+    `  "rationale": string,        // 2-4 sentences, why THIS twist fits the sort\n` +
     `  "mvp": string[],            // exactly 3 bullet strings\n` +
     `  "whyNow": string,           // one sentence\n` +
     `  "tags": string[]            // 2-4 short tags\n` +
@@ -187,7 +221,7 @@ export async function generateProposal(layoutSnapshot, history = []) {
     model: MODEL,
     contents: prompt,
     config: {
-      temperature: 1.1,
+      temperature: 1.3,
       responseMimeType: 'application/json',
     },
   });

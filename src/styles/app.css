@@ -1351,7 +1351,57 @@ button {
   background: var(--color-surface);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+}
+
+/* Optional steering input that sits above the spin button. Always
+   visible — the whole point is that it should feel like a casual
+   conversation field, not a hidden advanced option. Empty = default
+   creative behavior; typing = hard override signal to Gemini. */
+.proposal-guidance {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.proposal-guidance-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 22px;
+}
+
+.proposal-guidance-label-row > span {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  letter-spacing: 0.02em;
+}
+
+.proposal-guidance-input {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-input-bg);
+  color: var(--color-text);
+  font-family: inherit;
+  resize: vertical;
+  min-height: 56px;
+}
+
+.proposal-guidance-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
+}
+
+.proposal-guidance-input::placeholder {
+  color: var(--color-text-subtle);
+  font-style: italic;
 }
 
 .proposal-spin-btn {
@@ -1529,6 +1579,34 @@ button {
   background: var(--color-primary-soft);
   color: var(--color-primary-hover);
   letter-spacing: 0.02em;
+}
+
+/* "Your guidance" callout — shown only on proposals that had
+   userGuidance at generation time. Signals "this roll was steered,
+   not a default spin" so historical comparisons stay honest. */
+.proposal-article-guidance {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 14px;
+  margin-bottom: 24px;
+  background: var(--color-primary-soft);
+  border-left: 3px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.proposal-article-guidance-label {
+  font-weight: 600;
+  color: var(--color-primary-hover);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.proposal-article-guidance-text {
+  color: var(--color-text);
+  font-style: italic;
 }
 
 .proposal-article-section {

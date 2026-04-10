@@ -349,8 +349,14 @@ export async function placeCard(snapshotId, cardId, toContainerId, toIndex = nul
  * Only cards that are *placed in a column* are sent to Gemini — the
  * unplaced pool is intentionally ignored. The idea: the act of sorting
  * is the signal, and unplaced cards haven't been judged yet.
+ *
+ * @param {string} snapshotId
+ * @param {string} [userGuidance] optional free-form steering text.
+ *   Empty/undefined = no guidance, Gemini uses the creative default
+ *   prompt. If set, it's stored on the proposal row so you can see
+ *   what steered it when you reopen it later in the reader.
  */
-export async function generateProposal(snapshotId) {
+export async function generateProposal(snapshotId, userGuidance = '') {
   const snap = await db.snapshots.get(snapshotId);
   if (!snap) throw new Error('Snapshot not found');
 
@@ -392,6 +398,7 @@ export async function generateProposal(snapshotId) {
 
   const id = uid('prop');
   const now = Date.now();
+  const trimmedGuidance = (userGuidance || '').trim() || null;
   const placeholder = {
     id,
     snapshotId,
@@ -400,13 +407,14 @@ export async function generateProposal(snapshotId) {
     createdAt: now,
     model: 'gemini-2.5-flash',
     layoutSnapshot, // frozen at generation time — NEVER mutate
+    userGuidance: trimmedGuidance, // what the user typed/spoke to steer this roll
     content: null,
     error: null,
   };
   await db.proposals.add(placeholder);
 
   // Fire and forget — UI picks up the result via useLiveQuery.
-  callGeminiForProposal(layoutSnapshot, priorDone)
+  callGeminiForProposal(layoutSnapshot, priorDone, trimmedGuidance || '')
     .then(async (content) => {
       await db.proposals.update(id, {
         status: 'done',
