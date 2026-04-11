@@ -1541,6 +1541,18 @@ button {
   margin: 0 auto;
 }
 
+/* Top row: meta on the left, tools (trad/simp toggle, copy md) on
+   the right. Wraps if narrow so the buttons drop to a new line
+   instead of overflowing. */
+.proposal-article-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
 .proposal-article-meta {
   font-size: 11px;
   color: var(--color-text-subtle);
@@ -1548,11 +1560,73 @@ button {
   gap: 6px;
   align-items: center;
   letter-spacing: 0.02em;
-  margin-bottom: 10px;
 }
 
 .proposal-article-meta-sep {
   opacity: 0.5;
+}
+
+/* "轉換中…" indicator only shown when the user toggled to simp but
+   the opencc-js chunk hasn't loaded yet. Italic + muted so it
+   doesn't draw the eye. */
+.proposal-article-meta-loading {
+  font-style: italic;
+  color: var(--color-primary);
+}
+
+.proposal-article-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Compact pill buttons for the article toolbar. Smaller and
+   quieter than the main spin button so they read as utilities
+   rather than primary actions. */
+.proposal-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  transition: background 0.15s, border-color 0.15s, color 0.15s,
+    transform 0.1s;
+}
+
+.proposal-tool-btn:hover {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
+  color: var(--color-text);
+  transform: translateY(-1px);
+}
+
+.proposal-tool-btn.is-active {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
+  color: var(--color-primary-hover);
+}
+
+/* Brief green-ish "copied" flash. Reuses the existing primary
+   palette so we don't introduce a new color token just for this. */
+.proposal-tool-btn.is-copied {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+.proposal-tool-btn.is-copied:hover {
+  background: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+  color: #fff;
 }
 
 .proposal-article-title {

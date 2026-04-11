@@ -3,6 +3,11 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/database.js';
 import { deleteProposal, generateProposal } from '../db/actions.js';
 import useSpeechRecognition from '../lib/useSpeechRecognition.js';
+import {
+  convertProposalDeep,
+  ensureConverters,
+  useConverters,
+} from '../lib/chineseConvert.js';
 
 /**
  * Full-screen modal for viewing & managing project proposals for the
@@ -59,6 +64,12 @@ export default function ProposalModal({ open, snapshot, onClose }) {
   const [generating, setGenerating] = useState(false);
   const [spinError, setSpinError] = useState(null);
 
+  // Trad/Simp view toggle. Lives at the ProposalModal level so
+  // flipping once persists across switching between proposals in
+  // the history list within the same modal session. Resets on close.
+  // DB always stores Traditional — this is purely a view layer.
+  const [viewMode, setViewMode] = useState('trad');
+
   // Optional human steering for the next roll. Empty = no guidance
   // (default creative prompt). Cleared after each successful spin so
   // the user doesn't accidentally re-apply last round's steering.
@@ -110,6 +121,7 @@ export default function ProposalModal({ open, snapshot, onClose }) {
     if (!open) {
       setSelectedId(null);
       setSpinError(null);
+      setViewMode('trad');
       return;
     }
     if (proposals.length > 0 && !selectedId) {
@@ -299,7 +311,15 @@ export default function ProposalModal({ open, snapshot, onClose }) {
                 </div>
               </div>
             )}
-            {selected && <ProposalReader proposal={selected} />}
+            {selected && (
+              <ProposalReader
+                proposal={selected}
+                viewMode={viewMode}
+                onToggleViewMode={() =>
+                  setViewMode((m) => (m === 'trad' ? 'simp' : 'trad'))
+                }
+              />
+            )}
           </main>
         </div>
       </div>
@@ -343,7 +363,71 @@ function HistoryItem({ proposal, active, onClick, onDelete }) {
   );
 }
 
-function ProposalReader({ proposal }) {
+function ProposalReader({ proposal, viewMode, onToggleViewMode }) {
+  // Trad/Simp converter — null while the opencc-js chunk is still
+  // loading on first use, then a sync converter pair after.
+  const converters = useConverters();
+  const [copied, setCopied] = useState(false);
+
+  // Compute the displayed proposal: original if viewMode is 'trad'
+  // (the DB always stores Traditional, so no conversion needed) or
+  // if the converters are still loading. Otherwise apply
+  // toSimplified deeply. Memoized so toggling between proposals
+  // doesn't re-walk the tree on every render.
+  const displayed = useMemo(() => {
+    if (viewMode === 'trad') return proposal;
+    if (!converters) return proposal; // chunk still loading; show trad
+    return convertProposalDeep(proposal, converters.toSimplified);
+  }, [proposal, viewMode, converters]);
+
+  // Reset the "已複製" feedback whenever the user navigates to a
+  // different proposal — otherwise the checkmark sticks around
+  // misleadingly.
+  useEffect(() => {
+    setCopied(false);
+  }, [proposal?.id, viewMode]);
+
+  // Click handler for the toggle. If the user is switching from
+  // trad → simp and the chunk hasn't loaded yet, we still flip the
+  // mode immediately and let `displayed` fall back to original; the
+  // hook's useEffect will set converters once the chunk arrives,
+  // which retriggers the useMemo and the simplified version pops in.
+  function handleToggle() {
+    // Pre-warm the converter chunk on first click so the user
+    // doesn't sit on traditional output for a beat after toggling.
+    if (!converters) ensureConverters();
+    onToggleViewMode();
+  }
+
+  async function handleCopy() {
+    const md = buildMarkdown(displayed);
+    try {
+      await navigator.clipboard.writeText(md);
+      setCopied(true);
+      // 2-second flash, then revert.
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('clipboard write failed:', err);
+      // Last-ditch fallback: dump into a temp textarea + execCommand.
+      // Modern browsers support clipboard.writeText, but http://
+      // contexts (or some lockdown profiles) can refuse it.
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = md;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch (_) {
+        alert('複製失敗,請手動選取文字。');
+      }
+    }
+  }
+
   if (proposal.status === 'loading') {
     return (
       <div className="proposal-reader-loading">
@@ -359,21 +443,52 @@ function ProposalReader({ proposal }) {
         <h3>生成失敗</h3>
         <pre>{proposal.error || 'Unknown error'}</pre>
         <div className="proposal-reader-error-hint">
-          檢查一下 .env 裡的 VITE_GEMINI_API_KEY 是否有效，然後再按「抽一張」重試。
+          檢查一下 .env 裡的 VITE_GEMINI_API_KEY 是否有效,然後再按「抽一張」重試。
         </div>
       </div>
     );
   }
 
-  const c = proposal.content || {};
-  const layout = proposal.layoutSnapshot;
+  const c = displayed.content || {};
+  const layout = displayed.layoutSnapshot;
+  const isSimp = viewMode === 'simp';
 
   return (
     <article className="proposal-article">
-      <div className="proposal-article-meta">
-        <span>{formatAbsolute(proposal.createdAt)}</span>
-        <span className="proposal-article-meta-sep">·</span>
-        <span>{proposal.model || 'gemini'}</span>
+      <div className="proposal-article-header">
+        <div className="proposal-article-meta">
+          <span>{formatAbsolute(displayed.createdAt)}</span>
+          <span className="proposal-article-meta-sep">·</span>
+          <span>{displayed.model || 'gemini'}</span>
+          {isSimp && !converters && (
+            <>
+              <span className="proposal-article-meta-sep">·</span>
+              <span className="proposal-article-meta-loading">轉換中…</span>
+            </>
+          )}
+        </div>
+        <div className="proposal-article-tools">
+          <button
+            type="button"
+            className={`proposal-tool-btn ${isSimp ? 'is-active' : ''}`}
+            onClick={handleToggle}
+            title={
+              isSimp
+                ? '切回繁體中文顯示(原始版本)'
+                : '切換成簡體中文顯示(用 OpenCC 在本機轉換,不會送出網路)'
+            }
+          >
+            {isSimp ? '簡 → 繁' : '繁 → 簡'}
+          </button>
+          <button
+            type="button"
+            className={`proposal-tool-btn ${copied ? 'is-copied' : ''}`}
+            onClick={handleCopy}
+            title="複製整份提案的 Markdown 到剪貼簿"
+          >
+            {copied ? '✓ 已複製' : '📋 複製 Markdown'}
+          </button>
+        </div>
       </div>
 
       <h1 className="proposal-article-title">{c.title}</h1>
@@ -388,25 +503,25 @@ function ProposalReader({ proposal }) {
         </div>
       )}
 
-      {proposal.userGuidance && (
+      {displayed.userGuidance && (
         <div className="proposal-article-guidance">
           <span className="proposal-article-guidance-label">🎯 你的引導</span>
           <span className="proposal-article-guidance-text">
-            「{proposal.userGuidance}」
+            「{displayed.userGuidance}」
           </span>
         </div>
       )}
 
       {c.rationale && (
         <section className="proposal-article-section">
-          <h3>為什麼是這個？</h3>
+          <h3>{isSimp ? '为什么是这个？' : '為什麼是這個？'}</h3>
           <p>{c.rationale}</p>
         </section>
       )}
 
       {c.mvp && c.mvp.length > 0 && (
         <section className="proposal-article-section">
-          <h3>MVP 起手式</h3>
+          <h3>{isSimp ? 'MVP 起手式' : 'MVP 起手式'}</h3>
           <ul>
             {c.mvp.map((item, i) => (
               <li key={i}>{item}</li>
@@ -417,14 +532,18 @@ function ProposalReader({ proposal }) {
 
       {c.whyNow && (
         <section className="proposal-article-section">
-          <h3>為什麼現在適合做</h3>
+          <h3>{isSimp ? '为什么现在适合做' : '為什麼現在適合做'}</h3>
           <p>{c.whyNow}</p>
         </section>
       )}
 
       {layout && (
         <section className="proposal-article-section proposal-article-layout">
-          <h3>根據當時 board 上的這些卡片</h3>
+          <h3>
+            {isSimp
+              ? '根据当时 board 上的这些卡片'
+              : '根據當時 board 上的這些卡片'}
+          </h3>
           <div className="proposal-layout-grid">
             {layout.columns
               .filter((col) => col.cards.length > 0)
@@ -443,6 +562,86 @@ function ProposalReader({ proposal }) {
       )}
     </article>
   );
+}
+
+// ============================================================
+// Markdown serialization
+// ============================================================
+
+/**
+ * Turn a (possibly trad/simp-converted) proposal into a portable
+ * Markdown string the user can paste into Notion / docs / Slack /
+ * wherever. The structure mirrors what the reader shows on screen,
+ * minus the layout grid trick — columns become H3 sections.
+ *
+ * Crucially, the input here is the ALREADY-CONVERTED `displayed`
+ * object, NOT the raw DB row. So if the user toggled to simplified
+ * before clicking copy, the Markdown is also simplified. That's
+ * what they see, that's what they get.
+ */
+function buildMarkdown(displayed) {
+  if (!displayed) return '';
+  const c = displayed.content || {};
+  const layout = displayed.layoutSnapshot;
+  const lines = [];
+
+  lines.push(`# ${c.title || '(未命名提案)'}`);
+  lines.push('');
+
+  if (Array.isArray(c.tags) && c.tags.length > 0) {
+    lines.push(c.tags.map((t) => `#${t}`).join(' '));
+    lines.push('');
+  }
+
+  if (displayed.userGuidance) {
+    lines.push(`> 🎯 你的引導:「${displayed.userGuidance}」`);
+    lines.push('');
+  }
+
+  if (c.rationale) {
+    lines.push('## 為什麼是這個?');
+    lines.push('');
+    lines.push(c.rationale);
+    lines.push('');
+  }
+
+  if (Array.isArray(c.mvp) && c.mvp.length > 0) {
+    lines.push('## MVP 起手式');
+    lines.push('');
+    for (const b of c.mvp) lines.push(`- ${b}`);
+    lines.push('');
+  }
+
+  if (c.whyNow) {
+    lines.push('## 為什麼現在適合做');
+    lines.push('');
+    lines.push(c.whyNow);
+    lines.push('');
+  }
+
+  if (layout && Array.isArray(layout.columns)) {
+    const populatedCols = layout.columns.filter(
+      (col) => Array.isArray(col.cards) && col.cards.length > 0
+    );
+    if (populatedCols.length > 0) {
+      lines.push('## 根據當時 board 上的這些卡片');
+      lines.push('');
+      for (const col of populatedCols) {
+        lines.push(`### ${col.name}`);
+        lines.push('');
+        for (const card of col.cards) lines.push(`- ${card}`);
+        lines.push('');
+      }
+    }
+  }
+
+  lines.push('---');
+  lines.push('');
+  lines.push(
+    `*${formatAbsolute(displayed.createdAt)} · ${displayed.model || 'gemini'}*`
+  );
+
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
 }
 
 // ============================================================
